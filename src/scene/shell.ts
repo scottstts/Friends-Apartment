@@ -68,11 +68,10 @@ export function build(w: World): MatSet {
   const TP = L.TP
 
   // ---------------------------------------------------------------- floor
-  // The floor is the lowest surface: it can only ever cast onto the hidden
-  // subfloor, so both skip the 90-odd shadow passes entirely.
+  // Keep every opaque architectural surface in the caster set. Even though
+  // the parquet is the lowest visible surface, raised seams and thresholds
+  // still contribute to local occlusion in the reference.
   const subMat = mats.paint('subfloor_dark', '2A1F16', { rough: 0.8 })
-  subMat.userData.noShadow = true
-  M.parquet.userData.noShadow = true
   const sub = mlib.box(-0.6, L.SY - 0.6, -0.02, 12.4, 7.1, 0.0035)
   w.add(sub, subMat)
   // 0.52 m module: the set's parquet reads big

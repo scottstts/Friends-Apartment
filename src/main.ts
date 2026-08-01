@@ -1,13 +1,16 @@
-/** Entry point: WebGPU renderer (no fallback), AgX view transform, the
+/** Entry point: WebGPU renderer (no fallback), Blender Filmic view, the
  * compositor bloom from rnd.py, pointer-lock player, intro/pause veils. */
 import './scene/shadows'
 import * as THREE from 'three/webgpu'
-import { pass } from 'three/tsl'
+import { mix, mrt, normalView, output, pass, renderOutput, vec4 } from 'three/tsl'
 import { bloom } from 'three/examples/jsm/tsl/display/BloomNode.js'
+import { ao } from 'three/examples/jsm/tsl/display/GTAONode.js'
 import { World } from './scene/world'
 import { buildAll } from './scene/build'
 import { PlayerControls } from './player/controls'
 import { Ui } from './ui/ui'
+import { applyCameraBookmark, inspectionFromUrl } from './scene/cameras'
+import { blenderFilmicVeryHighContrast } from './filmic'
 
 interface GpuProbe {
   requestAdapter(): Promise<{
@@ -16,6 +19,7 @@ interface GpuProbe {
 }
 
 async function boot(): Promise<void> {
+  const inspection = inspectionFromUrl()
   if (!('gpu' in navigator)) {
     Ui.fatal('WebGPU required')
     return
@@ -44,11 +48,16 @@ async function boot(): Promise<void> {
     Ui.fatal('WebGPU required')
     return
   }
-  // Blender's default view transform: AgX at exposure 0
-  renderer.toneMapping = THREE.AgXToneMapping
+  // The reference renders use Filmic / Very High Contrast at exposure 0.
+  // Three has no Blender Filmic operator, so the exact view is applied in the
+  // final TSL image pipeline below.
+  renderer.toneMapping = THREE.NoToneMapping
   renderer.toneMappingExposure = 1.0
-  renderer.shadowMap.enabled = true
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap
+  renderer.shadowMap.enabled = inspection?.shadows ?? true
+  // WebGPU's PCFSoft path has a fixed one-texel kernel and ignores a light's
+  // authored shadow radius. The regular PCF path uses a rotated Vogel disk,
+  // so the finite fixture/sun sizes below can produce visible soft penumbrae.
+  renderer.shadowMap.type = THREE.PCFShadowMap
   document.body.appendChild(renderer.domElement)
 
   const setSize = (): void => {
@@ -89,7 +98,8 @@ async function boot(): Promise<void> {
   window.addEventListener('resize', () => {
     setSize()
     camera.aspect = innerWidth / innerHeight
-    camera.updateProjectionMatrix()
+    if (inspection) applyCameraBookmark(camera, inspection.view)
+    else camera.updateProjectionMatrix()
   })
 
   // Build the whole apartment (heavy, one-time) after the veil paints.
@@ -100,16 +110,58 @@ async function boot(): Promise<void> {
 
   controls = new PlayerControls(camera, world.colliders)
   controls.spawn(2.3, -1.15, 6.4, 3.9)
+  if (inspection) {
+    applyCameraBookmark(camera, inspection.view)
+    ui.enterGame()
+  }
 
-  // rnd.bloom(): threshold 1.0, strength 0.18, size 0.5 - only what is
-  // genuinely brighter than white blooms.
+  // Blender Glare's 0.18 strength maps to a substantially lower additive
+  // response in Three's bloom pyramid. Keep the authoritative threshold and
+  // radius, with the strength calibrated by fixed-camera output parity.
   const postProcessing = new THREE.PostProcessing(renderer)
   // fix the pass's sample count up front so the pipelines precompiled below
   // match the ones the real frames use
   const scenePass = pass(world.scene, camera, { samples: renderer.samples })
+  scenePass.setMRT(
+    mrt({
+      output,
+      normal: normalView,
+    }),
+  )
   const scenePassColor = scenePass.getTextureNode('output')
-  const bloomPass = bloom(scenePassColor, 0.18, 0.5, 1.0)
-  postProcessing.outputNode = scenePassColor.add(bloomPass)
+  const scenePassNormal = scenePass.getTextureNode('normal')
+  const scenePassDepth = scenePass.getTextureNode('depth')
+  let litColor: THREE.Node = scenePassColor
+  if (inspection?.ao !== false) {
+    // Cycles' indirect transport supplies tight grounding at furniture feet
+    // and wall/floor junctions. Full-resolution GTAO recovers a restrained
+    // local visibility term, preventing broad practical-light masks from
+    // doing the contact-shadow pass's job.
+    const gtaoPass = ao(scenePassDepth, scenePassNormal, camera)
+    gtaoPass.resolutionScale = 1
+    gtaoPass.radius.value = 0.32
+    gtaoPass.thickness.value = 1.25
+    gtaoPass.distanceExponent.value = 1.5
+    gtaoPass.distanceFallOff.value = 0.82
+    gtaoPass.scale.value = 0.9
+    gtaoPass.samples.value = 12
+    litColor = scenePassColor.mul(mix(1, gtaoPass.getTextureNode().r, 0.34))
+  }
+  const bloomPass = bloom(scenePassColor, 0.07, 0.5, 1.0)
+  const hdrOutput = inspection?.bloom === false ? litColor : litColor.add(bloomPass)
+  if (inspection?.grade !== false) {
+    // Bloom stays in scene-linear HDR, exactly as Blender's compositor does;
+    // the Filmic view and its look own all final contrast and colour handling.
+    const displayLinear = blenderFilmicVeryHighContrast(hdrOutput.rgb)
+    postProcessing.outputColorTransform = false
+    postProcessing.outputNode = renderOutput(
+      vec4(displayLinear, hdrOutput.a),
+      THREE.NoToneMapping,
+      renderer.outputColorSpace,
+    )
+  } else {
+    postProcessing.outputNode = hdrOutput
+  }
 
   // ~180 procedural WGSL pipelines would freeze the tab for a very long time
   // if the first frame compiled them synchronously.  Precompile them with the
@@ -146,7 +198,7 @@ async function boot(): Promise<void> {
   const clock = new THREE.Clock()
   renderer.setAnimationLoop(() => {
     const dt = clock.getDelta()
-    controls!.update(dt)
+    if (!inspection) controls!.update(dt)
     if (warmFrames < shadows.length) {
       shadows[warmFrames].needsUpdate = true
     }

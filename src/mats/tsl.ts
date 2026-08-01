@@ -37,6 +37,14 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type N = any
 
+// Cycles integrates high-frequency procedural relief over many samples. A
+// single raster derivative needs a much smaller response or the same source
+// fields collapse into pixel-scale black/white aliasing. `?bump=0` remains a
+// deterministic flat-normal diagnostic; numeric values allow bounded audits.
+const bumpParam = typeof window === 'undefined' ? null : new URL(window.location.href).searchParams.get('bump')
+const parsedBump = bumpParam === null ? 0.004 : Number(bumpParam)
+const RASTER_BUMP_RESPONSE = Number.isFinite(parsedBump) ? Math.min(0.2, Math.max(0, parsedBump)) : 0.004
+
 /** hex -> linear rgb triple (Blender's srgb() port). */
 export function srgbTriple(h: string | [number, number, number]): [number, number, number] {
   let r: number, g: number, b: number
@@ -336,7 +344,12 @@ export function layerWeightFacing(blend: number): N {
 /** Height-field bump via screen-space derivatives (the realtime equivalent of
  * Blender's Bump node).  Returns a view-space normal for material.normalNode. */
 export function bumpNormal(height: N, strength: number, dist = 1): N {
-  const h = mul(height, strength * dist * 60.0)
+  if (RASTER_BUMP_RESPONSE === 0) return normalView
+  // Blender's Bump node applies Strength * Distance to the height derivative.
+  // The previous arbitrary 60x multiplier turned sub-millimetre finish into
+  // near-tangent normals, producing the black/bright stipple seen across the
+  // walls, upholstery and timber under practical lights.
+  const h = mul(height, strength * dist * RASTER_BUMP_RESPONSE)
   const dHdx = dFdx(h)
   const dHdy = dFdy(h)
   const sigmaX = dFdx(positionView)

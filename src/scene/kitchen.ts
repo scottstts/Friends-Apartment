@@ -965,7 +965,14 @@ function ceilingDome(w: World, loc: Vec3, M: MatSet, r = 0.165, energy = 300.0, 
   mlib.translate(bl.md, [0, 0, -0.246])
   mlib.translate(bl.md, loc)
   w.add(bl.md, bl.mat)
-  w.pointLight([loc[0], loc[1], loc[2] - 0.232], energy, P.blackbody(kelvin), 0.1)
+  // Approved real-time visual override: higher-power/cooler Blender practical
+  // values look washed without Cycles' path-traced transport. A warmer source
+  // plus a stronger soft mask restores the reference's depth and saturation.
+  const visualEnergy = energy * 0.9
+  const visualKelvin = Math.min(kelvin, 4200)
+  w.pointLight([loc[0], loc[1], loc[2] - 0.232], visualEnergy, P.blackbody(visualKelvin), 0.1, {
+    shadowIntensity: 0.6,
+  })
 }
 
 function rattanPendant(w: World, loc: Vec3, r = 0.235, h = 0.225, drop = 1.05): void {

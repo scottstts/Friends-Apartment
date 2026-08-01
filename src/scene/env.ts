@@ -118,15 +118,21 @@ export function makeSky(az = 289.0, el = 23.0): SkyResult {
   const data = new Uint16Array(W * H * 4)
   const toHalf = THREE.DataUtils.toHalfFloat
   const avg = [0, 0, 0]
-  let avgN = 0
+  let avgWeight = 0
   for (let y = 0; y < H; y++) {
-    // equirect: v=0 bottom (-z) .. v=1 top (+z)
-    const theta = Math.PI * (1 - (y + 0.5) / H) // 0 at top
+    // Three's equirectangular convention is Y-up even though this scene (and
+    // Blender) is Z-up. Pack each texel by Three's sampling direction, then
+    // evaluate the sky in the apartment's real XYZ frame. The old Z-up image
+    // layout made Three sample the horizon for a +Z ray, rotating daylight and
+    // diffuse IBL ninety degrees away from the modeled sun and windows.
+    const v = (y + 0.5) / H
+    const latitude = Math.PI * (v - 0.5)
+    const dy = Math.sin(latitude)
+    const ring = Math.cos(latitude)
     for (let x = 0; x < W; x++) {
-      const phi = 2 * Math.PI * ((x + 0.5) / W) - Math.PI
-      const dx = -Math.sin(phi) * Math.sin(theta)
-      const dy = -Math.cos(phi) * Math.sin(theta)
-      const dz = Math.cos(theta)
+      const longitude = 2 * Math.PI * ((x + 0.5) / W - 0.5)
+      const dx = Math.cos(longitude) * ring
+      const dz = Math.sin(longitude) * ring
       const [r, g, b] = skyRadiance([dx, dy, dz], sunDir, 1.4, 2.4, 60)
       const i = (y * W + x) * 4
       data[i] = toHalf(r)
@@ -134,10 +140,11 @@ export function makeSky(az = 289.0, el = 23.0): SkyResult {
       data[i + 2] = toHalf(b)
       data[i + 3] = toHalf(1)
       if (dz > 0.02) {
-        avg[0] += r
-        avg[1] += g
-        avg[2] += b
-        avgN++
+        // Rows near the equirectangular poles cover less solid angle.
+        avg[0] += r * ring
+        avg[1] += g * ring
+        avg[2] += b * ring
+        avgWeight += ring
       }
     }
   }
@@ -147,7 +154,11 @@ export function makeSky(az = 289.0, el = 23.0): SkyResult {
   tex.minFilter = THREE.LinearFilter
   tex.needsUpdate = true
   tex.colorSpace = THREE.LinearSRGBColorSpace
-  return { texture: tex, sunDir, avg: [avg[0] / avgN, avg[1] / avgN, avg[2] / avgN] as [number, number, number] }
+  return {
+    texture: tex,
+    sunDir,
+    avg: [avg[0] / avgWeight, avg[1] / avgWeight, avg[2] / avgWeight] as [number, number, number],
+  }
 }
 
 /** World sky + SUN lamp.  strength/sun_energy exactly as build_all passes. */
@@ -172,7 +183,10 @@ export function skyAndSun(w: World, strength = 0.145, sunEnergy = 2.4): void {
   cam.far = 80
   sun.shadow.bias = -0.0004
   sun.shadow.normalBias = 0.02
-  sun.shadow.radius = 3
+  sun.shadow.radius = 12
+  // Cycles' 1.6-degree sun has a broad penumbra; PCF cannot reproduce its
+  // distance-dependent softness, so blend the otherwise hard raster mask.
+  sun.shadow.intensity = 0.65
   w.addLight(sun)
   w.scene.add(sun.target)
   // feed the thin-surface translucency approximation
@@ -337,6 +351,7 @@ export function build(w: World): void {
     spot.shadow.camera.far = 16
     spot.shadow.bias = -0.0008
     spot.shadow.normalBias = 0.02
+    spot.shadow.intensity = 0.72
     w.addLight(spot)
     w.scene.add(spot.target)
   }

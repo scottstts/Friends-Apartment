@@ -162,7 +162,7 @@ export class World {
     energy: number,
     color: [number, number, number],
     size = 0.05,
-    opts: { shadow?: boolean; distance?: number } = {},
+    opts: { shadow?: boolean; distance?: number; shadowIntensity?: number } = {},
   ): THREE.PointLight {
     const l = new THREE.PointLight(new THREE.Color(...color), energy / (4 * Math.PI))
     l.position.set(...loc)
@@ -175,7 +175,15 @@ export class World {
       l.shadow.camera.far = 14
       l.shadow.bias = -0.0015
       l.shadow.normalBias = 0.015
-      l.shadow.radius = Math.max(1, size * 40)
+      // PointShadowFilter interprets this in cube-map texels. Keep the kernel
+      // compact: physical area-light contact shadows start sharp and widen
+      // with separation, whereas a large constant kernel erases small props.
+      l.shadow.radius = Math.max(2, size * 50)
+      // Cycles returns indirect practical-light bounce inside a cast shadow;
+      // PCF has neither emissive-mesh GI nor distance-dependent area penumbrae.
+      // Fixtures can therefore specify a measured residual according to their
+      // actual shade geometry, while the authored source power stays exact.
+      l.shadow.intensity = opts.shadowIntensity ?? (size >= 0.09 ? 0.72 : 0.68)
     }
     this.addLight(l)
     return l
@@ -186,6 +194,10 @@ export class World {
       const merged = mlib.join(list)
       const geo = toGeometry(merged)
       const mesh = new THREE.Mesh(geo, mat)
+      // All opaque geometry is a caster and receiver. `noShadow` is reserved
+      // for transmissive glazing and emitter shells: this depth-only path
+      // cannot represent partial transmission, and treating either as opaque
+      // would black out windows or self-occlude a practical light.
       mesh.castShadow = !mat.userData.noShadow
       mesh.receiveShadow = true
       mesh.matrixAutoUpdate = false
@@ -205,6 +217,8 @@ export class World {
     for (const { md, mat, at } of this.separate) {
       const geo = toGeometry(md)
       const mesh = new THREE.Mesh(geo, mat)
+      // Same caster contract as merged geometry; rugs and other separate
+      // objects must not fall through a different shadow path.
       mesh.castShadow = !mat.userData.noShadow
       mesh.receiveShadow = true
       mesh.frustumCulled = false

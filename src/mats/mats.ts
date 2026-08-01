@@ -48,6 +48,17 @@ import {
 
 const CACHE = new Map<string, THREE.Material>()
 
+// Cycles' diffuse interreflection is absent from the direct-light raster path.
+// This is the low-order residual after the authored sky and practical lights,
+// expressed as base-colour-preserving transport rather than an extra fill
+// light. `?bounce=0` exposes the direct-only baseline for parity diagnostics.
+const bounceParam =
+  typeof window === 'undefined' ? null : new URL(window.location.href).searchParams.get('bounce')
+const parsedBounce = bounceParam === null ? 1 : Number(bounceParam)
+const RASTER_BOUNCE_RESPONSE = Number.isFinite(parsedBounce)
+  ? Math.min(2, Math.max(0, parsedBounce))
+  : 1
+
 export function get(name: string): THREE.Material | undefined {
   return CACHE.get(name)
 }
@@ -111,6 +122,14 @@ export function principled(o: PrincipledOpts): THREE.MeshPhysicalNodeMaterial {
   m.side = THREE.DoubleSide
   const baseNode: N = o.base ?? (o.color !== undefined ? srgb(o.color) : vec3(0.8, 0.8, 0.8))
   m.colorNode = baseNode
+  let emission: N = mul(
+    baseNode,
+    vec3(
+      0.042 * RASTER_BOUNCE_RESPONSE,
+      0.034 * RASTER_BOUNCE_RESPONSE,
+      0.026 * RASTER_BOUNCE_RESPONSE,
+    ),
+  )
   if (o.roughN) m.roughnessNode = o.roughN
   else m.roughness = o.rough ?? 0.45
   m.metalness = o.metal ?? 0
@@ -129,13 +148,14 @@ export function principled(o: PrincipledOpts): THREE.MeshPhysicalNodeMaterial {
     m.clearcoatRoughness = 0.06
   }
   if (o.emis !== undefined) {
-    m.emissiveNode = o.emis
+    emission = add(emission, o.emis)
   }
   if (o.translucent) {
     const e = translucentEmission(baseNode, o.translucent)
-    m.emissiveNode = o.emis !== undefined ? add(o.emis, e) : e
+    emission = add(emission, e)
     m.side = THREE.DoubleSide
   }
+  m.emissiveNode = emission
   if (o.aniso) {
     m.anisotropy = o.aniso
   }
@@ -640,11 +660,18 @@ export function emissive(
 ): THREE.Material {
   return cached(name, () => {
     const { strength = 6.0, rough = 0.6, base } = o
-    return principled({
+    const m = principled({
       color: base ?? hexcol,
       rough,
       emis: mul(srgb(hexcol), strength),
     })
+    // Bulbs and thin glowing shades surround their analytic point sources.
+    // A binary depth map would make those emitter shells opaque and prevent
+    // every downstream object from writing a distinct shadow. Cycles instead
+    // treats the opal shell as transmitting/emitting, so omit it from the
+    // depth-only caster set while keeping ordinary scene geometry intact.
+    m.userData.noShadow = true
+    return m
   })
 }
 

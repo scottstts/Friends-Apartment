@@ -1099,6 +1099,7 @@ function consoleTable(w: World, M: MatSet): void {
 
 // ----------------------------------------------------------------------- lamps
 export function tableLamp(w: World, cx: number, cy: number, cz: number, M: MatSet, energy = 26.0, scale = 1.0): void {
+  void energy // retained for authoritative build-call parity; emissive-only in raster
   const base = mlib.revolve(
     [
       [0.0, 0.0],
@@ -1131,10 +1132,13 @@ export function tableLamp(w: World, cx: number, cy: number, cz: number, M: MatSe
   mlib.scaleMesh(bl.md, scale)
   mlib.translate(bl.md, [cx, cy, cz])
   w.add(bl.md, bl.mat)
-  w.pointLight([cx, cy, cz + 0.35 * scale], energy, [1.0, 0.8, 0.6], 0.07, { shadow: false, distance: 3.0 })
+  // The shade/bulb provide the visible emissive practical. Do not add an
+  // unshadowed point fill: additive light that ignores occluders erases the
+  // dominant ceiling source's object silhouettes.
 }
 
 function floorLamp(w: World, cx: number, cy: number, M: MatSet, energy = 34.0): void {
+  void energy // retained for authoritative build-call parity; emissive-only in raster
   const base = mlib.revolve(
     [
       [0.0, 0.0],
@@ -1160,7 +1164,9 @@ function floorLamp(w: World, cx: number, cy: number, M: MatSet, energy = 34.0): 
   mlib.translate(bl.md, [0, 0, 1.31])
   mlib.translate(bl.md, [cx, cy, 0.0])
   w.add(bl.md, bl.mat)
-  w.pointLight([cx, cy, 1.36], energy, [1.0, 0.81, 0.62], 0.08, { shadow: false, distance: 4.0 })
+  // Emissive-only for the same reason as tableLamp: a shadowless local point
+  // would lift the main overhead shadow uniformly instead of filling it via
+  // physically occluded indirect transport.
   w.obb(cx, cy, 0.16, 0.16, 0)
 }
 
@@ -1221,7 +1227,13 @@ function ceilingLight(w: World, cx: number, cy: number, M: MatSet, energy = 350.
   const ob = mlib.join(parts)
   mlib.smoothShade(ob, 38)
   mlib.translate(ob, [cx, cy, 0.0])
-  w.add(ob, M.brass)
+  // The analytic light sits inside this assembly. Keep its local brass shell
+  // visible but out of the binary depth pass, otherwise cube-face seams from
+  // fixture self-occlusion project a square pool onto the ceiling.
+  const fixtureBrass = M.brass.clone()
+  fixtureBrass.name = 'living_ceiling_brass'
+  fixtureBrass.userData.noShadow = true
+  w.add(ob, fixtureBrass)
   const prof: Vec2[] = []
   for (let i = 0; i < 15; i++) {
     const t = i / 14.0
@@ -1239,7 +1251,13 @@ function ceilingLight(w: World, cx: number, cy: number, M: MatSet, energy = 350.
     mlib.translate(bl.md, [cx, cy, 0.0])
     w.add(bl.md, bl.mat)
   }
-  w.pointLight([cx, cy, rimZ + 0.01], energy, P.blackbody(kelvin), 0.16)
+  // Real-time visual override approved against the Cycles reference: the raw
+  // Blender wattage/temperature washes out in this direct-light-only path.
+  // Keep the authored arguments at the call site, but render the practical at
+  // lower power and a warmer CCT, with a strong soft mask for room grounding.
+  const visualEnergy = energy * 0.62
+  const visualKelvin = Math.min(kelvin, 4100)
+  w.pointLight([cx, cy, rimZ + 0.01], visualEnergy, P.blackbody(visualKelvin), 0.16, { shadowIntensity: 0.9 })
 }
 
 export function sconce(w: World, loc: Vec3, normal: Vec2, M: MatSet, energy = 13.0, shadow = false): void {
@@ -1299,21 +1317,29 @@ export function sconce(w: World, loc: Vec3, normal: Vec2, M: MatSet, energy = 13
     mlib.translate(o.md, loc)
     w.add(o.md, o.mat)
   }
-  w.pointLight([loc[0] + normal[0] * 0.14, loc[1] + normal[1] * 0.14, loc[2] + 0.2], energy, [1.0, 0.74, 0.5], 0.06, {
-    shadow,
-    distance: shadow ? undefined : 3.0,
-  })
+  // Never add a direct-light source that ignores occluders. The two authored
+  // bedroom sconces request real maps; decorative hallway sconces retain
+  // their emissive shades without a wall-leaking unshadowed fill.
+  if (shadow) {
+    w.pointLight(
+      [loc[0] + normal[0] * 0.14, loc[1] + normal[1] * 0.14, loc[2] + 0.2],
+      energy,
+      [1.0, 0.74, 0.5],
+      0.06,
+    )
+  }
 }
 
 // -------------------------------------------------------------------- poster
 const FONT = new FontLoader().parse(helvJson as unknown as Parameters<FontLoader['parse']>[0])
 
-function textMesh(body: string, size: number, width = 1.0): MeshData {
+function textMesh(body: string, size: number, width = 1.0, maxWidth = Infinity): MeshData {
   const geo = new TextGeometry(body, { font: FONT, size, depth: 0.0012, curveSegments: 5 })
   geo.computeBoundingBox()
   const bb = geo.boundingBox!
   const cx = (bb.min.x + bb.max.x) / 2
   const cy = (bb.min.y + bb.max.y) / 2
+  const naturalWidth = bb.max.x - bb.min.x
   const pos = geo.getAttribute('position')
   const index = geo.getIndex()
   const md = new MeshData()
@@ -1330,7 +1356,11 @@ function textMesh(body: string, size: number, width = 1.0): MeshData {
     }
   }
   geo.dispose()
-  if (width !== 1.0) mlib.scaleMesh(md, [width, 1.0, 1.0])
+  // Blender's built-in Bfont and Three's Helvetiker have very different
+  // advance widths. Preserve the authored size/placement, then cap each line
+  // to the print area it occupies in the Cycles reference.
+  const fittedWidth = Math.min(width, maxWidth / naturalWidth)
+  if (fittedWidth !== 1.0) mlib.scaleMesh(md, [fittedWidth, 1.0, 1.0])
   mlib.rotX(md, Math.PI / 2)
   return md
 }
@@ -1344,16 +1374,16 @@ function jouetsPoster(w: World, M: MatSet): void {
   const red = mats.paint('ink_red', '9A1B1E', { rough: 0.55, coat: 0.0 })
   const dark = mats.paint('ink_dark', '2A211C', { rough: 0.6, coat: 0.0 })
   const txt: P.Placed[] = []
-  const t1 = textMesh('AUX BUTTES CHAUMONT', 0.072, 0.92)
+  const t1 = textMesh('AUX BUTTES CHAUMONT', 0.072, 0.92, 0.66)
   mlib.translate(t1, [0.0, 0.0, ph * 0.34])
   txt.push({ md: t1, mat: red })
-  const t2 = textMesh('Jouets', 0.2, 1.0)
+  const t2 = textMesh('Jouets', 0.2, 1.0, 0.48)
   mlib.translate(t2, [0.1, 0.0, ph * 0.04])
   txt.push({ md: t2, mat: red })
-  const t3 = textMesh('ET  OBJETS  POUR  ETRENNES', 0.042, 0.9)
+  const t3 = textMesh('ET  OBJETS  POUR  ETRENNES', 0.042, 0.9, 0.62)
   mlib.translate(t3, [0.13, 0.0, -ph * 0.2])
   txt.push({ md: t3, mat: dark })
-  const t4 = textMesh('MAISON  DU  PROGRES', 0.03, 0.9)
+  const t4 = textMesh('MAISON  DU  PROGRES', 0.03, 0.9, 0.42)
   mlib.translate(t4, [0.13, 0.0, -ph * 0.33])
   txt.push({ md: t4, mat: dark })
   // three harlequin figures printed bottom-left
