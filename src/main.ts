@@ -11,6 +11,7 @@ import { PlayerControls } from './player/controls'
 import { Ui } from './ui/ui'
 import { applyCameraBookmark, inspectionFromUrl } from './scene/cameras'
 import { blenderFilmicVeryHighContrast } from './filmic'
+import { isDesktopChromium } from './platform'
 
 interface GpuProbe {
   requestAdapter(): Promise<{
@@ -19,6 +20,10 @@ interface GpuProbe {
 }
 
 async function boot(): Promise<void> {
+  if (!isDesktopChromium(navigator)) {
+    Ui.fatal('Desktop Chromium required')
+    return
+  }
   const inspection = inspectionFromUrl()
   if (!('gpu' in navigator)) {
     Ui.fatal('WebGPU required')
@@ -82,17 +87,6 @@ async function boot(): Promise<void> {
     onResume: () => {
       renderer.domElement.requestPointerLock()
     },
-  })
-
-  document.addEventListener('pointerlockchange', () => {
-    const locked = document.pointerLockElement === renderer.domElement
-    if (controls) controls.enabled = locked
-    if (locked) {
-      started = true
-      ui.enterGame()
-    } else if (started) {
-      ui.showPause()
-    }
   })
 
   window.addEventListener('resize', () => {
@@ -195,19 +189,57 @@ async function boot(): Promise<void> {
     }
   }
   let warmFrames = 0
-  const clock = new THREE.Clock()
-  renderer.setAnimationLoop(() => {
+  let ready = false
+  let rendering = false
+  const clock = new THREE.Clock(false)
+
+  const stopRendering = (): void => {
+    if (!rendering) return
+    renderer.setAnimationLoop(null)
+    clock.stop()
+    rendering = false
+  }
+
+  const renderFrame = (): void => {
     const dt = clock.getDelta()
-    if (!inspection) controls!.update(dt)
+    if (!inspection && controls?.enabled) controls.update(dt)
     if (warmFrames < shadows.length) {
       shadows[warmFrames].needsUpdate = true
     }
     postProcessing.render()
     warmFrames++
-    if (warmFrames === shadows.length + 2) {
+    if (!ready && warmFrames === shadows.length + 2) {
+      ready = true
       ui.ready()
+      // The intro and inspection views retain this fully warmed static frame.
+      // Gameplay rendering begins only after pointer lock is acquired.
+      if (document.pointerLockElement !== renderer.domElement) stopRendering()
+    }
+  }
+
+  const startRendering = (): void => {
+    if (rendering) return
+    rendering = true
+    clock.start()
+    renderer.setAnimationLoop(renderFrame)
+  }
+
+  document.addEventListener('pointerlockchange', () => {
+    const locked = document.pointerLockElement === renderer.domElement
+    if (controls) controls.enabled = locked
+    if (locked) {
+      started = true
+      ui.enterGame()
+      startRendering()
+    } else if (started) {
+      stopRendering()
+      ui.showPause()
     }
   })
+
+  // Warm the static shadow maps and final image once behind the loading veil.
+  // Once ready, no frames are scheduled until the player enters the game.
+  startRendering()
 }
 
 boot()

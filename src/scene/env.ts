@@ -267,11 +267,12 @@ export function build(w: World): void {
   const mSteel = mats.metal('metal_dark_ext', '2E2C2A', { rough: 0.5, bump: 0.15 })
 
   // brick veneer on the outside of the alcove north wall
-  const ven = mlib.panelWithHoles(L.AL_X[1] - L.AL_X[0], L.BW_TOP, 0.03, [
-    [L.BW_X[0] - L.AL_X[0], L.BW_SILL, L.BW_X[1] - L.AL_X[0], L.BW_TOP],
+  const VX = L.HALL_EW[1]
+  const ven = mlib.panelWithHoles(L.AL_X[1] - VX, L.BW_TOP, 0.03, [
+    [L.BW_X[0] - VX, L.BW_SILL, L.BW_X[1] - VX, L.BW_TOP],
   ])
   mlib.transform4(ven, [
-    [1, 0, 0, L.AL_X[0]],
+    [1, 0, 0, VX],
     [0, 1, 0, L.AL_Y[1] + L.TW + 0.002],
     [0, 0, 1, 0],
     [0, 0, 0, 1],
@@ -280,11 +281,12 @@ export function build(w: World): void {
   w.add(ven, mb)
 
   // narrow setback ledge outside the window with a low masonry parapet
-  w.add(mlib.box(2.0, L.AL_Y[1] + L.TW, -0.1, 13.0, 7.0, 0.02), mConc)
-  const par = mlib.box(2.0, 6.8, -0.05, 13.0, 7.0, 0.88)
+  const TX = L.HALL_EW[1] + 0.13
+  w.add(mlib.box(TX, L.AL_Y[1] + L.TW, -0.1, 13.0, 7.0, 0.02), mConc)
+  const par = mlib.box(TX, 6.8, -0.05, 13.0, 7.0, 0.88)
   mlib.bevel(par, 0.02, 2)
   w.add(par, mConc)
-  const cap = mlib.box(1.96, 6.76, 0.88, 13.04, 7.04, 0.945)
+  const cap = mlib.box(TX - 0.04, 6.76, 0.88, 13.04, 7.04, 0.945)
   mlib.bevel(cap, 0.012, 2)
   w.add(cap, mConc)
   // fire-escape rail rising past the window

@@ -128,7 +128,9 @@ function bed(w: World, cy: number, M: MatSet, quilt: THREE.Material, ML: MatSet)
   const mat_ = mlib.cushion(L.BED_L - 0.12, bw - 0.1, 0.22, 0.06)
   mlib.translate(mat_, [(x0 + x1) / 2 - 0.02, cy, 0.4])
   w.add(mat_, M.linen)
-  const duv = bedspread((x0 + x1) / 2 - 0.13, cy, L.BED_L - 0.26, bw + 0.14, 0.665, 0.3, Math.abs(Math.trunc(Math.abs(cy) * 97)) % 991)
+  // Extend the spread past the mattress foot so the two bulged surfaces do not
+  // sit within a few millimetres and z-fight at grazing views.
+  const duv = bedspread((x0 + x1) / 2 - 0.12, cy, L.BED_L - 0.02, bw + 0.14, 0.665, 0.3, Math.abs(Math.trunc(Math.abs(cy) * 97)) % 991)
   w.add(duv, quilt)
   for (const s of [-1, 1]) {
     const pw = mlib.cushion(0.44, 0.62, 0.175, 0.085)
@@ -259,13 +261,13 @@ export function build(w: World): void {
 
   // ------------------------------------------------------ Monica's bedroom
   bed(w, L.MB_WIN_Y, M, M.quiltB, ML)
-  chest(w, L.BED_X[0] + 0.28, L.MB_Y[0] + 0.85, 0.0, M)
+  chest(w, L.BED_X[0] + 0.28, L.MD_Y[1] + 0.68, 0.0, M)
   areaRug(w, 9.9, L.MB_WIN_Y + 0.1, 1.6, 2.1, M)
   P.framed(
     w,
     0.36,
     0.46,
-    [L.EXW + 0.03, L.MB_Y[1] - 2.25, 1.62],
+    [L.EXW + 0.03, L.MD_Y[1] + 0.68, 1.62],
     [1, 0],
     gold,
     mats.botanical('art_mb', {
@@ -277,7 +279,7 @@ export function build(w: World): void {
       bloom: ['8A6C92', 'C7B2CE'],
     }),
   )
-  FL.sconce(w, [L.EXW + 0.02, L.MB_Y[1] - 1.75, 1.8], [1, 0], ML, 16.0, true)
+  FL.sconce(w, [L.EXW + 0.02, L.MB_Y[1] - 0.85, 1.8], [1, 0], ML, 16.0, true)
 }
 
 export function dressHall(w: World): void {
@@ -286,7 +288,6 @@ export function dressHall(w: World): void {
   const artSpecs: [number, number, number, number][] = [
     [4.36, 1.86, 0.24, 0.3],
     [4.36, 1.5, 0.24, 0.3],
-    [4.66, 1.7, 0.22, 0.28],
   ]
   artSpecs.forEach(([yy, zz, aw, ah], i) => {
     P.framed(
@@ -329,10 +330,11 @@ export function dressHall(w: World): void {
   }
   const tob = mlib.join(parts)
   mlib.smoothShade(tob, 40)
-  mlib.translate(tob, [L.HALL_X[1] - 0.24, 5.1, 0.0])
+  const hty = L.NW_Y - 0.45
+  mlib.translate(tob, [L.HALL_X[1] - 0.24, hty, 0.0])
   w.add(tob, white, { collide: true })
-  FL.tableLamp(w, L.HALL_X[1] - 0.24, 5.1, 0.72, ML2, 16.0, 0.85)
-  FL.sconce(w, [L.HALL_X[0] + 0.02, 4.1, 1.78], [1, 0], ML2, 11.0)
+  FL.tableLamp(w, L.HALL_X[1] - 0.24, hty, 0.72, ML2, 16.0, 0.85)
+  FL.sconce(w, [L.HALL_X[0] + 0.02, 4.36, 2.16], [1, 0], ML2, 11.0)
 
   // ------------------------------------------------------------ bathroom
   const wht = mats.paint('porcelain', 'F2F0E8', { rough: 0.1, coat: 0.6 })
@@ -461,7 +463,7 @@ export function dressHall(w: World): void {
   mlib.bevel(mc, 0.005, 2)
   w.add(mc, wht)
   w.add(mlib.box(BX - 0.235, L.BA_Y[1] - 0.175, 1.15, BX + 0.235, L.BA_Y[1] - 0.158, 1.63), mats.metal('mirror_glass', 'F0F2F4', { rough: 0.02, bump: 0.0 }))
-  // WC against the east wall, south of the basin
+  // WC against the south wall, clear of the inward-swinging door.
   const lo = mlib.revolve(
     [
       [0.0, 0.0],
@@ -474,13 +476,13 @@ export function dressHall(w: World): void {
     22,
   )
   mlib.smoothShade(lo, 36)
-  const WX = L.BA_X[1] - 0.34
-  const WY = L.BA_Y[0] + 0.36
+  const WX = L.BA_X[0] + 1.22
+  const WY = L.BA_Y[0] + 0.34
   mlib.translate(lo, [WX, WY, 0.0])
   w.add(lo, wht, { collide: true })
-  const cis = mlib.box(WX - 0.2, WY - 0.32, 0.4, WX + 0.2, WY - 0.1, 0.78)
+  const cis = mlib.box(WX - 0.2, WY - 0.33, 0.4, WX + 0.2, WY - 0.11, 0.78)
   mlib.bevel(cis, 0.012, 2)
   w.add(cis, wht)
   // bathroom overhead: a fitting, not a bare lamp
-  P.flushDome(w, [2.2, 5.4, 2.62], 0.115, 15.0, [1.0, 0.9, 0.8], 0.07)
+  P.flushDome(w, [(L.BA_X[0] + L.BA_X[1]) * 0.5, (L.BA_Y[0] + L.BA_Y[1]) * 0.5, 2.62], 0.115, 17.0, [1.0, 0.9, 0.8], 0.07)
 }

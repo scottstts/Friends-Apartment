@@ -271,9 +271,9 @@ export function build(w: World, M?: MatSet): MatSet {
   // ============================================================ HUGE WINDOW
   {
     const bw = L.BW_X[1] - L.BW_X[0]
-    const bh = L.BW_TOP - L.BW_SILL
     const bcx = (L.BW_X[0] + L.BW_X[1]) * 0.5
-    const [bf, bg] = O.steelWindow(bw - 0.02, bh - 0.01, [1, 1.15, 1], 4, {
+    const slopeLen = (L.BW_HEAD - L.BW_SILL) / Math.cos(L.BW_TILT)
+    const [bf, bg] = O.steelWindow(bw - 0.02, slopeLen - 0.01, [1, 1.15, 1], 7, {
       frameW: 0.068,
       frameD: 0.075,
       mullW: 0.055,
@@ -286,66 +286,35 @@ export function build(w: World, M?: MatSet): MatSet {
       [bf, M.steel_dk],
       [bg, M.glass],
     ] as [MeshData, THREE.Material][]) {
-      mlib.translate(o, [0, 0, L.BW_SILL])
-      O.place(o, [bcx, L.AL_Y[1], 0.0], [1, 0], [0, -1])
+      // One continuous near-vertical window; its head leans south into the room.
+      mlib.rotX(o, L.BW_TILT)
+      O.place(o, [bcx, 0.0, 0.0], [1, 0], [0, 1])
+      mlib.translate(o, [0, L.AL_Y[1] - 0.008, L.BW_SILL + 0.006])
       w.add(o, mm)
+    }
+    // Triangular plaster reveals close the leaned glazing at each jamb.
+    for (const [a, b] of [
+      [L.BW_X[0] - 0.075, L.BW_X[0] + 0.012],
+      [L.BW_X[1] - 0.012, L.BW_X[1] + 0.075],
+    ] as [number, number][]) {
+      w.add(
+        mlib.prismYZ(
+          [
+            [L.NYW, L.BW_SILL],
+            [L.NYW, L.BW_HEAD],
+            [L.NYW - L.BW_LEAN, L.BW_HEAD],
+          ],
+          a,
+          b,
+        ),
+        mats.get('wall_lavender')!,
+      )
     }
     // stone sill inside + out
     const si = mlib.box(L.BW_X[0] - 0.06, L.AL_Y[1] - 0.02, L.BW_SILL - 0.055, L.BW_X[1] + 0.06, L.AL_Y[1] + L.TW + 0.1, L.BW_SILL)
     mlib.bevel(si, 0.008, 2)
     w.add(si, M.stone)
-    // raked glazing above
-    const ry = L.AL_Y[1]
-    const rz0 = L.BW_TOP
-    const rz1 = L.AL_Z
-    const slopeLen = Math.hypot(ry - L.RAKE_Y, rz1 - rz0)
-    const ang = Math.atan2(rz1 - rz0, -(ry - L.RAKE_Y))
-    const [rf, rg] = O.steelWindow(bw - 0.02, slopeLen - 0.02, [1, 1.15, 1], 3, {
-      frameW: 0.068,
-      frameD: 0.07,
-      mullW: 0.055,
-      munW: 0.026,
-      munD: 0.032,
-      colsPerBay: 2,
-      glassBack: 0.016,
-    })
-    for (const [o, mm] of [
-      [rf, M.steel_dk],
-      [rg, M.glass],
-    ] as [MeshData, THREE.Material][]) {
-      mlib.rotX(o, -(Math.PI / 2 - ang))
-      O.place(o, [bcx, 0.0, 0.0], [1, 0], [0, 1])
-      mlib.translate(o, [0, ry - 0.01, rz0 + 0.01])
-      w.add(o, mm)
-    }
-    // plaster cheeks built directly in world space
-    for (const [a, b] of [
-      [L.AL_X[0], L.BW_X[0]],
-      [L.BW_X[1], L.AL_X[1]],
-    ] as [number, number][]) {
-      const pts: [number, number][] = [
-        [ry, rz0],
-        [ry, rz0 - 0.1],
-        [L.RAKE_Y, rz1 - 0.1],
-        [L.RAKE_Y, rz1],
-      ]
-      const vs: [number, number, number][] = [
-        ...pts.map((p) => [a, p[0], p[1]] as [number, number, number]),
-        ...pts.map((p) => [b, p[0], p[1]] as [number, number, number]),
-      ]
-      const fs = [
-        [3, 2, 1, 0],
-        [4, 5, 6, 7],
-        [0, 1, 5, 4],
-        [1, 2, 6, 5],
-        [2, 3, 7, 6],
-        [3, 0, 4, 7],
-      ]
-      const ob = mlib.meshObj(vs, fs)
-      mlib.recalcNormals(ob)
-      w.add(ob, mats.get('wall_lavender')!)
-    }
-    // Matchstick blinds hanging on the rake, as real battens
+    // Matchstick blinds hang down the upper half of the single leaned window.
     const PITCH = 0.0175
     const SLAT = 0.0128
     const THK = 0.0075
@@ -355,18 +324,14 @@ export function build(w: World, M?: MatSet): MatSet {
       [L.BW_X[0] + (2 * bw) / 3 + 0.02, L.BW_X[1] - 0.03],
     ]
     spans.forEach(([a, b], i) => {
-      const t = i !== 1 ? 0.72 : 0.8
-      const y0 = ry - 0.055
-      const z0 = rz0 + 0.06
-      const y1 = y0 - (ry - L.RAKE_Y) * t
-      const z1 = z0 + (rz1 - rz0) * t
-      const dy = y1 - y0
-      const dz = z1 - z0
-      const run = Math.hypot(dy, dz)
-      const uy = dy / run
-      const uz = dz / run
+      const t = i !== 1 ? 0.5 : 0.58
+      const uy = Math.sin(L.BW_TILT)
+      const uz = -Math.cos(L.BW_TILT)
       const ny = uz
       const nz = -uy
+      const y0 = L.NYW - L.BW_LEAN + ny * 0.055
+      const z0 = L.BW_HEAD - 0.055
+      const run = slopeLen * t
       const slats: MeshData[] = []
       const n = Math.max(2, Math.floor(run / PITCH))
       for (let k = 0; k < n; k++) {
@@ -409,8 +374,8 @@ export function build(w: World, M?: MatSet): MatSet {
     const bcs = O.casing(bdw, L.BD_H, 0.09, 0.022)
     O.place(bcs, [L.HALL_X[0], bdc, 0.0], [0, -1], [1, 0])
     w.add(bcs, M.trim)
-    // left standing open, swinging out into the hall (hinged north jamb)
-    swingLeaf(w, bdw - 0.05, L.BD_H - 0.028, [L.HALL_X[0] - 0.03, L.BD_Y[1] - 0.045], [0.0, -1.0], -82.0, M, M.trim, 0.04)
+    // The deeper bathroom clears the WC, so the leaf now swings inward.
+    swingLeaf(w, bdw - 0.05, L.BD_H - 0.028, [L.HALL_WW[0] + 0.03, L.BD_Y[1] - 0.045], [0.0, -1.0], 84.0, M, M.trim, 0.04)
   }
 
   // ============ CLOSET DOOR (green, head of the hallway, faces south) =====
@@ -418,17 +383,17 @@ export function build(w: World, M?: MatSet): MatSet {
     const clw = L.CL_X[1] - L.CL_X[0]
     const clc = (L.CL_X[0] + L.CL_X[1]) * 0.5
     const cll = O.lining(clw, L.CL_H, 0.3, 0.022)
-    O.place(cll, [clc, L.AL_Y[1], 0.0], [1, 0], [0, 1])
+    O.place(cll, [clc, L.NW_Y, 0.0], [1, 0], [0, 1])
     w.add(cll, M.green_door)
     const clcs = O.casing(clw, L.CL_H, 0.092, 0.024)
-    O.place(clcs, [clc, L.AL_Y[1], 0.0], [1, 0], [0, -1])
+    O.place(clcs, [clc, L.NW_Y, 0.0], [1, 0], [0, -1])
     w.add(clcs, M.green_door)
     const cld = O.panelDoor(clw - 0.05, L.CL_H - 0.028, 0.04, [0.28, 0.28, 0.22, 0.22], 0.108, 0.118, 0.082)
     mlib.translate(cld, [0, 0.04, 0.01])
-    O.place(cld, [clc, L.AL_Y[1], 0.0], [1, 0], [0, 1])
+    O.place(cld, [clc, L.NW_Y, 0.0], [1, 0], [0, 1])
     w.add(cld, M.green_door)
     const kn3 = O.knobSet()
-    O.place(kn3, [L.CL_X[1] - 0.13, L.AL_Y[1] - 0.04, 1.0], [1, 0], [0, -1])
+    O.place(kn3, [L.CL_X[1] - 0.13, L.NW_Y - 0.04, 1.0], [1, 0], [0, -1])
     w.add(kn3, M.brass)
   }
 
@@ -467,20 +432,37 @@ export function build(w: World, M?: MatSet): MatSet {
     swingLeaf(w, cdw - 0.055, L.CD_H - 0.03, [L.EX + 0.052, L.CD_Y[1] - 0.028], [0.0, -1.0], -104.0, M, M.trim)
   }
 
-  // ===== MONICA'S BEDROOM DOOR: central wall, north end, off the alcove ====
+  // ===== MONICA'S BEDROOM DOOR: south of the alcove, with frosted transom ===
   {
     const TWALL = L.EXW - L.EX
     const mdw = L.MD_Y[1] - L.MD_Y[0]
     const mdc = (L.MD_Y[0] + L.MD_Y[1]) * 0.5
-    const ml2 = O.lining(mdw, L.MD_H, TWALL, 0.024)
+    const ml2 = O.lining(mdw, L.MD_TOP, TWALL, 0.024)
     O.place(ml2, [L.EX, mdc, 0.0], [0, -1], [1, 0])
     w.add(ml2, M.trim)
-    const mcs = O.casing(mdw, L.MD_H, 0.095, 0.024)
+    const mcs = O.casing(mdw, L.MD_TOP, 0.095, 0.024)
     O.place(mcs, [L.EX, mdc, 0.0], [0, -1], [-1, 0])
     w.add(mcs, M.trim)
-    const mcs2 = O.casing(mdw, L.MD_H, 0.08, 0.02)
+    const mcs2 = O.casing(mdw, L.MD_TOP, 0.08, 0.02)
     O.place(mcs2, [L.EXW, mdc, 0.0], [0, -1], [1, 0])
     w.add(mcs2, M.trim)
+    const hr3 = mlib.box(-mdw / 2, 0.0, L.MD_H, mdw / 2, TWALL, L.MD_H + 0.075)
+    O.place(hr3, [L.EX, mdc, 0.0], [0, -1], [1, 0])
+    w.add(hr3, M.trim)
+    const [tf3, tg3] = O.steelWindow(mdw - 0.048, L.MD_TOP - L.MD_H - 0.085, [1], 1, {
+      frameW: 0.046,
+      frameD: 0.05,
+      colsPerBay: 1,
+      glassBack: 0.008,
+    })
+    for (const [o, mm] of [
+      [tf3, M.trim],
+      [tg3, M.glass_frost],
+    ] as [MeshData, THREE.Material][]) {
+      mlib.translate(o, [0, 0, L.MD_H + 0.085])
+      O.place(o, [L.EX, mdc, 0.0], [0, -1], [1, 0])
+      w.add(o, mm)
+    }
     // left standing open, swinging east into the bedroom (hinged south jamb)
     swingLeaf(w, mdw - 0.055, L.MD_H - 0.03, [L.EX + 0.052, L.MD_Y[0] + 0.028], [0.0, 1.0], 104.0, M, M.trim)
   }

@@ -67,6 +67,16 @@ canvas { display: block; }
 }
 `
 
+const STYLE_ID = 'friends-ui'
+
+function installStyles(): void {
+  if (document.getElementById(STYLE_ID)) return
+  const style = document.createElement('style')
+  style.id = STYLE_ID
+  style.textContent = CSS
+  document.head.appendChild(style)
+}
+
 export class Ui {
   private intro: HTMLDivElement
   private pause: HTMLDivElement
@@ -75,9 +85,7 @@ export class Ui {
 
   constructor(hooks: UiHooks) {
     this.hooks = hooks
-    const style = document.createElement('style')
-    style.textContent = CSS
-    document.head.appendChild(style)
+    installStyles()
 
     this.intro = document.createElement('div')
     this.intro.className = 'veil'
@@ -125,6 +133,7 @@ export class Ui {
   }
 
   static fatal(msg: string): void {
+    installStyles()
     const d = document.createElement('div')
     d.className = 'fatal'
     d.textContent = msg

@@ -399,35 +399,40 @@ function bentwoodChair(w: World, cx: number, cy: number, rot: number, M: MatSet,
       [r, 0.01],
       [r, 0.026],
       [r - 0.014, 0.034],
-      [0.0, 0.03],
+      [r - 0.07, 0.03],
+      [0.0, 0.026],
     ],
-    34,
+    44,
   )
   mlib.smoothShade(st, 34)
   mlib.translate(st, [0, 0, seatH - 0.034])
   parts.push(st)
+  const curl = (p0: Vec3, sign: number, drop: number): Vec3[] => {
+    const out: Vec3[] = []
+    for (let j = 1; j <= 6; j++) {
+      const u = j / 6
+      out.push([p0[0] + sign * 0.012 * u, p0[1] + 0.02 * u, p0[2] - drop * u ** 0.85])
+    }
+    return out
+  }
   const pts: Vec3[] = []
-  const n = 26
+  const n = 48
   for (let i = 0; i <= n; i++) {
-    const t = i / n
-    const a = Math.PI * (1.0 - t)
-    pts.push([r * 0.93 * Math.cos(a), 0.1 - 0.3 * Math.sin(a) ** 1.4, seatH + 0.46 * Math.sin(a) ** 0.55])
+    const a = Math.PI * (1.0 - i / n)
+    const s = Math.sin(a)
+    pts.push([r * 0.92 * Math.cos(a), 0.088 - 0.285 * s ** 1.4, seatH + 0.455 * s ** 0.55])
   }
-  const full: Vec3[] = [[pts[0][0], pts[0][1], seatH - 0.01], ...pts, [pts[pts.length - 1][0], pts[pts.length - 1][1], seatH - 0.01]]
-  const hoop = mlib.tubeAlong(full, [
-    [0.012, -0.016],
-    [0.012, 0.016],
-    [-0.012, 0.016],
-    [-0.012, -0.016],
-  ])
-  parts.push(hoop)
+  const full: Vec3[] = [...curl(pts[0], -1, 0.08).reverse(), ...pts, ...curl(pts[pts.length - 1], 1, 0.08)]
+  parts.push(mlib.tubeAlong(full, mlib.circle(0.0135, 14)))
   const innerPts: Vec3[] = []
-  for (let i = 0; i < 19; i++) {
-    const t = i / 18.0
-    const a = Math.PI * (1.0 - t)
-    innerPts.push([r * 0.55 * Math.cos(a), 0.055 - 0.2 * Math.sin(a) ** 1.4, seatH + 0.11 + 0.24 * Math.sin(a) ** 0.6])
+  const n2 = 34
+  for (let i = 0; i <= n2; i++) {
+    const a = Math.PI * (1.0 - i / n2)
+    const s = Math.sin(a)
+    innerPts.push([r * 0.56 * Math.cos(a), 0.058 - 0.19 * s ** 1.4, seatH + 0.058 + 0.29 * s ** 0.62])
   }
-  parts.push(mlib.tubeAlong(innerPts, mlib.circle(0.01, 8)))
+  const inner: Vec3[] = [...curl(innerPts[0], -1, 0.128).reverse(), ...innerPts, ...curl(innerPts[innerPts.length - 1], 1, 0.128)]
+  parts.push(mlib.tubeAlong(inner, mlib.circle(0.0105, 12)))
   for (let k = 0; k < 4; k++) {
     const a = (Math.PI * 2 * k) / 4 + Math.PI / 4
     parts.push(
@@ -437,17 +442,17 @@ function bentwoodChair(w: World, cx: number, cy: number, rot: number, M: MatSet,
           [r * 0.95 * Math.cos(a), r * 0.95 * Math.sin(a), seatH * 0.55],
           [r * 1.18 * Math.cos(a), r * 1.18 * Math.sin(a), 0.0],
         ],
-        mlib.circle(0.0145, 9),
+        mlib.circle(0.0145, 12),
       ),
     )
   }
   parts.push(
     mlib.tubeAlong(
-      Array.from({ length: 26 }, (_, i) => {
-        const a = (i * Math.PI * 2) / 26
+      Array.from({ length: 36 }, (_, i) => {
+        const a = (i * Math.PI * 2) / 36
         return [r * Math.cos(a), r * Math.sin(a), 0.2] as Vec3
       }),
-      mlib.circle(0.0095, 7),
+      mlib.circle(0.0105, 10),
       { closePath: true },
     ),
   )

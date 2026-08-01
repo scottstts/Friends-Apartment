@@ -3,10 +3,7 @@
  * table, Aubusson rug, waterfall credenza with the CRT and the Jouets poster,
  * window seat, drapes, lamps, plants. */
 import * as THREE from 'three/webgpu'
-import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js'
-import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js'
-import helvJson from 'three/examples/fonts/helvetiker_regular.typeface.json'
-import { abs, add, atan, clamp, cos, div, max, min, mix, mul, positionLocal, sin, sqrt, sub, vec3 } from 'three/tsl'
+import { abs, add, atan, clamp, cos, div, max, min, mix, mul, positionLocal, sin, sqrt, sub, texture, uv, vec3 } from 'three/tsl'
 import * as L from '../lib/L'
 import * as mlib from '../lib/mlib'
 import { MeshData, type Vec2, type Vec3 } from '../lib/mesh'
@@ -212,16 +209,20 @@ function rugMat(name = 'rug_aubusson'): THREE.Material {
   return m
 }
 
+let posterMaterial: THREE.Material | undefined
+
 function posterMat(name = 'poster_jouets'): THREE.Material {
-  const existing = mats.get(name)
-  if (existing) return existing
-  const p = positionLocal
-  const n = bnoise(p, 90.0, 5.0, 0.5)
-  const n2 = bnoise(p, 6.0, 4.0, 0.5)
-  const col = mix(srgb('E8DEBE'), srgb('D6C79E'), n2)
-  const bmp = bumpNormal(n, 0.1, 0.004)
-  const m = principled({ base: col, rough: 0.62, normal: bmp, spec: 0.3 })
+  if (posterMaterial) return posterMaterial
+  const image = new THREE.TextureLoader().load('/poster.jpg')
+  image.colorSpace = THREE.SRGBColorSpace
+  image.wrapS = THREE.ClampToEdgeWrapping
+  image.wrapT = THREE.ClampToEdgeWrapping
+  image.minFilter = THREE.LinearMipmapLinearFilter
+  image.magFilter = THREE.LinearFilter
+  image.anisotropy = 8
+  const m = principled({ base: texture(image, uv()), rough: 0.62, spec: 0.3 })
   m.name = name
+  posterMaterial = m
   return m
 }
 
@@ -342,6 +343,12 @@ function upholBody(ln: number, dep: number, seatZ = 0.415, armZ = 0.63, backZ = 
   return [parts, { x0, x1, y0, y1, seatZ, armZ, backZ, aw, backt }]
 }
 
+const BACK_LEAN = rad(-6.0)
+
+function backX(x0: number, backt: number, thick: number, h: number): number {
+  return x0 + backt + thick * 0.5 * Math.cos(BACK_LEAN) + h * Math.abs(Math.sin(BACK_LEAN))
+}
+
 function sofa(w: World, cx: number, cy: number, M: MatSet, ln = 2.32, dep = 0.9): void {
   const [parts, g] = upholBody(ln, dep)
   const { x0, y0, y1, seatZ, backZ, aw, backt } = g
@@ -352,12 +359,12 @@ function sofa(w: World, cx: number, cy: number, M: MatSet, ln = 2.32, dep = 0.9)
   for (let i = 0; i < nseat; i++) {
     const cw = pitch - 0.028
     const yy = y0 + aw + (i + 0.5) * pitch
-    const cu = mlib.cushion(dep - 0.3, cw, 0.16, 0.105)
-    mlib.translate(cu, [0.055, yy, seatZ])
+    const cu = mlib.cushion(0.56, cw, 0.16, 0.105)
+    mlib.translate(cu, [0.15, yy, seatZ])
     parts.push(cu)
-    const bc = mlib.cushion(0.3, cw, 0.46, 0.115)
-    mlib.rotY(bc, rad(-12))
-    mlib.translate(bc, [-0.039, yy, 0.5])
+    const bc = mlib.cushion(0.18, cw, 0.46, 0.115)
+    mlib.rotY(bc, BACK_LEAN)
+    mlib.translate(bc, [backX(x0, backt, 0.18, 0.46), yy, 0.5])
     parts.push(bc)
   }
   const ob = mlib.join(parts)
@@ -413,24 +420,19 @@ function drapeOver(cx: number, cy: number, ztop: number, w0 = 1.2, front = 0.5, 
 
 function armchair(w: World, cx: number, cy: number, rot: number, M: MatSet, cw = 0.96, dep = 0.94): void {
   const [parts, g] = upholBody(cw, dep, 0.415, 0.63, 0.85, 0.175, 0.21)
-  const { x0, seatZ, backZ, aw, backt } = g
-  const cu = mlib.cushion(dep - 0.3, cw - 2 * aw - 0.02, 0.16, 0.05)
-  mlib.translate(cu, [0.055, 0.0, seatZ])
+  const { x0, seatZ, aw, backt } = g
+  const cu = mlib.cushion(0.58, cw - 2 * aw - 0.02, 0.16, 0.05)
+  mlib.translate(cu, [0.155, 0.0, seatZ])
   parts.push(cu)
-  const bc = mlib.cushion(0.25, cw - 2 * aw - 0.02, 0.48, 0.055)
-  mlib.rotY(bc, rad(-12))
-  mlib.translate(bc, [x0 + backt + 0.1, 0.0, seatZ - 0.02])
+  const bc = mlib.cushion(0.18, cw - 2 * aw - 0.02, 0.48, 0.055)
+  mlib.rotY(bc, BACK_LEAN)
+  mlib.translate(bc, [backX(x0, backt, 0.18, 0.48), 0.0, seatZ - 0.02])
   parts.push(bc)
   const ob = mlib.join(parts)
   mlib.rotateZ(ob, rot)
   mlib.translate(ob, [cx, cy, 0.0])
   w.add(ob, M.damask)
   w.obb(cx, cy, dep / 2 + 0.04, cw / 2 + 0.04, rot)
-  // red-and-white checked quilt folded over the back
-  const th = drapeOver(x0 + backt * 0.5, 0.0, backZ, 0.74, 0.34, 0.26, backt * 0.5 + 0.05)
-  mlib.rotateZ(th, rot)
-  mlib.translate(th, [cx, cy, 0.0])
-  w.add(th, M.check)
 }
 
 function slipperChair(w: World, cx: number, cy: number, rot: number, M: MatSet, cw = 0.63, dep = 0.72): void {
@@ -460,6 +462,17 @@ function slipperChair(w: World, cx: number, cy: number, rot: number, M: MatSet, 
     ] as [number, number][]
   ).map(([dz, s]) => cpts.map(([x, y]) => [x * s, y * s, SEAT_T + dz] as Vec3))
   const cush = mlib.loft(cushRings, { closeV: true, capStart: true, capEnd: true })
+  // Blender's bevel + smooth-by-angle keeps the broad top cap normal separate
+  // from the rounded sides. The raw Three loft shares those vertices, causing
+  // long cap triangles to interpolate side normals across the whole seat; one
+  // triangle then faces almost completely away from the ceiling light and
+  // reads as a black wedge at distance. Duplicate only the cap loop to create
+  // the deliberate normal seam Blender produces without changing silhouette.
+  const topCapIndex = cush.faces.length - 1
+  cush.faces[topCapIndex] = cush.faces[topCapIndex].map((vi) => {
+    cush.verts.push([...cush.verts[vi]] as Vec3)
+    return cush.verts.length - 1
+  })
   mlib.smoothShade(cush, 48)
   parts.push(cush)
   // back: a solid section swept across the width
@@ -954,43 +967,63 @@ function crtTv(w: World, cx: number, cy: number, cz: number, M: MatSet, cw = 0.6
   }
 }
 
-function speaker(w: World, cx: number, cy: number, M: MatSet, cw = 0.24, d = 0.28, h = 0.44): void {
+function speaker(w: World, cx: number, cy: number, M: MatSet, cw = 0.32, d = 0.4, h = 0.7): void {
   const placed: [MeshData, THREE.Material][] = []
+  const veneer = mats.wood('wood_speaker', ['7A5028', '5A3418', '3A2008'], { ring: 44, warp: 0.05, bump: 0.28, axis: 'YZ' })
   const box = mlib.box(-d / 2, -cw / 2, 0.0, d / 2, cw / 2, h)
   mlib.bevel(box, 0.006, 2)
-  placed.push([box, M.bakelite])
-  const surr = mats.paint('rubber_surround', '4A211C', { rough: 0.62 })
-  const drivers: [number, number, THREE.Material][] = [
-    [h - 0.1, 0.03, M.bakelite],
-    [h - 0.28, 0.072, surr],
-  ]
-  for (const [zz, rr, mm] of drivers) {
-    const ring = mlib.revolve(
-      [
-        [rr * 0.55, 0.0],
-        [rr, 0.01],
-        [rr * 0.92, 0.02],
-        [rr * 0.5, 0.014],
-        [0.0, 0.006],
-      ],
-      22,
-    )
-    mlib.rotY(ring, -Math.PI / 2)
-    mlib.translate(ring, [-d / 2 - 0.004, 0.0, zz])
-    mlib.smoothShade(ring, 40)
-    placed.push([ring, mm])
+  placed.push([box, veneer])
+  const baffle = mlib.box(-d / 2 - 0.01, -cw / 2 + 0.022, 0.026, -d / 2 + 0.004, cw / 2 - 0.022, h - 0.026)
+  mlib.bevel(baffle, 0.003, 2)
+  placed.push([baffle, M.bakelite])
+  const surr = mats.paint('rubber_surround', '5E2018', { rough: 0.62 })
+  const coneMat = mats.paint('driver_cone', '241E1A', { rough: 0.8 })
+  for (const [zz, rr, hasSurround] of [
+    [h * 0.34, 0.098, true],
+    [h * 0.76, 0.036, false],
+  ] as [number, number, boolean][]) {
+    if (hasSurround) {
+      const ring = mlib.revolve(
+        [
+          [rr * 0.62, 0.0],
+          [rr, 0.012],
+          [rr * 1.06, 0.026],
+          [rr * 0.98, 0.034],
+          [rr * 0.6, 0.02],
+        ],
+        26,
+      )
+      mlib.rotY(ring, -Math.PI / 2)
+      mlib.translate(ring, [-d / 2 - 0.006, 0.0, zz])
+      mlib.smoothShade(ring, 40)
+      placed.push([ring, surr])
+    }
+    const scale = rr / 0.098
     const cone = mlib.revolve(
       [
-        [0.0, -0.022],
-        [rr * 0.55, 0.0],
-        [rr * 0.62, 0.004],
+        [0.0, -0.03 * scale],
+        [rr * 0.28, -0.022 * scale],
+        [rr * 0.62, 0.002],
+        [rr * 0.7, 0.01],
+      ],
+      26,
+    )
+    mlib.rotY(cone, -Math.PI / 2)
+    mlib.translate(cone, [-d / 2 - 0.006, 0.0, zz])
+    mlib.smoothShade(cone, 40)
+    placed.push([cone, coneMat])
+    const cap = mlib.revolve(
+      [
+        [0.0, 0.0],
+        [rr * 0.24, -0.004],
+        [rr * 0.26, -0.018],
       ],
       20,
     )
-    mlib.rotY(cone, -Math.PI / 2)
-    mlib.translate(cone, [-d / 2 - 0.004, 0.0, zz])
-    mlib.smoothShade(cone, 40)
-    placed.push([cone, M.bakelite])
+    mlib.rotY(cap, -Math.PI / 2)
+    mlib.translate(cap, [-d / 2 - 0.006 - 0.03 * scale, 0.0, zz])
+    mlib.smoothShade(cap, 40)
+    placed.push([cap, M.bakelite])
   }
   for (const [ob, mm] of placed) {
     mlib.translate(ob, [cx, cy, 0.0])
@@ -1068,15 +1101,28 @@ function consoleTable(w: World, M: MatSet): void {
   const cx = (L.BW_X[0] + L.BW_X[1]) * 0.5
   const cy = L.AL_Y[1] - L.SEAT_D - 0.3
   const cw = 1.35
-  const d = 0.4
+  const d = 0.42
   const h = 0.715
   const placed: [MeshData, THREE.Material][] = []
-  const top = mlib.box(-cw / 2, -d / 2, h - 0.04, cw / 2, d / 2, h)
-  mlib.bevel(top, 0.005, 3)
+  const top = mlib.box(-cw / 2, -d / 2, h - 0.028, cw / 2, d / 2, h)
+  mlib.bevel(top, 0.006, 3)
   placed.push([top, M.limed])
-  const ap = mlib.box(-cw / 2 + 0.05, -d / 2 + 0.035, h - 0.11, cw / 2 - 0.05, d / 2 - 0.035, h - 0.04)
-  mlib.bevel(ap, 0.004, 2)
-  placed.push([ap, M.limed])
+  const lip = mlib.box(-cw / 2 + 0.012, -d / 2 + 0.012, h - 0.046, cw / 2 - 0.012, d / 2 - 0.012, h - 0.028)
+  mlib.bevel(lip, 0.004, 2)
+  placed.push([lip, M.limed])
+  const ix = cw / 2 - 0.058
+  const iy = d / 2 - 0.04
+  const railT = 0.026
+  for (const [x0, y0, x1, y1] of [
+    [-ix, iy - railT, ix, iy],
+    [-ix, -iy, ix, -iy + railT],
+    [-ix, -iy, -ix + railT, iy],
+    [ix - railT, -iy, ix, iy],
+  ] as [number, number, number, number][]) {
+    const rail = mlib.box(x0, y0, h - 0.148, x1, y1, h - 0.046)
+    mlib.bevel(rail, 0.003, 2)
+    placed.push([rail, M.limed_y])
+  }
   for (const [sx, sy] of [
     [-1, -1],
     [1, -1],
@@ -1084,17 +1130,99 @@ function consoleTable(w: World, M: MatSet): void {
     [1, 1],
   ] as [number, number][]) {
     const pts: Vec3[] = [
-      [sx * (cw / 2 - 0.06), sy * (d / 2 - 0.05), h - 0.1],
-      [sx * (cw / 2 - 0.02), sy * (d / 2 + 0.02), 0.0],
+      [sx * (ix - railT * 0.5), sy * (iy - railT * 0.5), h - 0.046],
+      [sx * (ix - 0.034), sy * (iy - 0.03), 0.0],
     ]
-    placed.push([mlib.tubeAlong(pts, mlib.roundedRect(0.048, 0.038, 0.006, 2)), M.limed_v])
+    placed.push([mlib.tubeAlong(pts, mlib.roundedRect(0.048, 0.044, 0.005, 2)), M.limed_v])
   }
-  placed.push([mlib.box(-cw / 2 + 0.02, -0.014, 0.175, cw / 2 - 0.02, 0.014, 0.205), M.limed])
+  const sz0 = 0.188
+  const sz1 = 0.214
+  for (const sx of [-1, 1]) {
+    const ends = [sx * (ix - 0.048), sx * (ix - 0.014)].sort((a, b) => a - b)
+    const end = mlib.box(ends[0], -(iy - 0.026), sz0, ends[1], iy - 0.026, sz1)
+    mlib.bevel(end, 0.003, 2)
+    placed.push([end, M.limed_y])
+  }
+  const long = mlib.box(-(ix - 0.03), -0.017, sz0 + 0.002, ix - 0.03, 0.017, sz1 - 0.002)
+  mlib.bevel(long, 0.003, 2)
+  placed.push([long, M.limed])
   for (const [ob, mm] of placed) {
     mlib.translate(ob, [cx, cy, 0.0])
     w.add(ob, mm)
   }
   w.box2(cx - cw / 2, cy - d / 2, cx + cw / 2, cy + d / 2)
+}
+
+/** Console, picture and sconce on the wall between Monica's door and the bay. */
+function doorWall(w: World, M: MatSet): void {
+  const cy = (L.MD_WALL[0] + L.MD_WALL[1]) * 0.5
+  const cw = 0.78
+  const d = 0.36
+  const h = 0.725
+  const cx = L.EX - d / 2 - 0.012
+  const placed: [MeshData, THREE.Material][] = []
+  const top = mlib.box(-d / 2, -cw / 2, h - 0.026, d / 2, cw / 2, h)
+  mlib.bevel(top, 0.006, 3)
+  placed.push([top, M.limed_y])
+  const lip = mlib.box(-d / 2 + 0.01, -cw / 2 + 0.01, h - 0.04, d / 2 - 0.01, cw / 2 - 0.01, h - 0.026)
+  mlib.bevel(lip, 0.004, 2)
+  placed.push([lip, M.limed_y])
+  const ix = d / 2 - 0.03
+  const iy = cw / 2 - 0.03
+  for (const [a, b] of [
+    [[ix - 0.022, -iy], [ix, iy]],
+    [[-ix, -iy], [-ix + 0.022, iy]],
+    [[-ix, -iy], [ix, -iy + 0.022]],
+    [[-ix, iy - 0.022], [ix, iy]],
+  ] as [Vec2, Vec2][]) {
+    const rail = mlib.box(a[0], a[1], h - 0.155, b[0], b[1], h - 0.04)
+    mlib.bevel(rail, 0.003, 2)
+    placed.push([rail, M.limed_y])
+  }
+  for (const [sx, sy] of [
+    [-1, -1],
+    [1, -1],
+    [-1, 1],
+    [1, 1],
+  ] as [number, number][]) {
+    placed.push([
+      mlib.tubeAlong(
+        [
+          [sx * (ix - 0.022), sy * (iy - 0.022), h - 0.04],
+          [sx * (ix - 0.03), sy * (iy - 0.03), 0.0],
+        ],
+        mlib.roundedRect(0.044, 0.044, 0.004, 2),
+      ),
+      M.limed_v,
+    ])
+  }
+  const shelf = mlib.box(-ix + 0.03, -iy + 0.034, 0.175, ix - 0.03, iy - 0.034, 0.196)
+  mlib.bevel(shelf, 0.004, 2)
+  placed.push([shelf, M.limed_y])
+  for (const [ob, mm] of placed) {
+    mlib.translate(ob, [cx, cy, 0.0])
+    w.add(ob, mm)
+  }
+  w.box2(cx - d / 2, cy - cw / 2, cx + d / 2, cy + cw / 2)
+  const gilt = mats.get('paint_gilt') ?? mats.paint('paint_gilt', 'C9A24A', { rough: 0.3, coat: 0.4 })
+  P.framed(
+    w,
+    0.34,
+    0.42,
+    [L.EX - 0.028, cy, 1.4],
+    [-1, 0],
+    gilt,
+    mats.botanical('art_doorwall', {
+      normal: [-1, 0],
+      seed: 27,
+      ground: 'E6DEC2',
+      stem: '4A5C34',
+      leafc: ['3F5730', '738650'],
+      bloom: ['9C6A78', 'DCC0C6'],
+    }),
+    0.055,
+  )
+  sconce(w, [L.EX - 0.02, cy, 1.86], [-1, 0], M, 14.0)
 }
 
 // ----------------------------------------------------------------------- lamps
@@ -1135,39 +1263,6 @@ export function tableLamp(w: World, cx: number, cy: number, cz: number, M: MatSe
   // The shade/bulb provide the visible emissive practical. Do not add an
   // unshadowed point fill: additive light that ignores occluders erases the
   // dominant ceiling source's object silhouettes.
-}
-
-function floorLamp(w: World, cx: number, cy: number, M: MatSet, energy = 34.0): void {
-  void energy // retained for authoritative build-call parity; emissive-only in raster
-  const base = mlib.revolve(
-    [
-      [0.0, 0.0],
-      [0.15, 0.0],
-      [0.155, 0.014],
-      [0.12, 0.03],
-      [0.04, 0.042],
-      [0.026, 0.06],
-      [0.02, 0.09],
-      [0.018, 1.3],
-      [0.0, 1.3],
-    ],
-    24,
-  )
-  mlib.smoothShade(base, 34)
-  mlib.translate(base, [cx, cy, 0.0])
-  w.add(base, M.brass)
-  const sh = P.pleatedShade(0.13, 0.205, 0.235, 26)
-  mlib.translate(sh, [0, 0, 1.26])
-  mlib.translate(sh, [cx, cy, 0.0])
-  w.add(sh, mats.get('shade_emis')!)
-  const bl = P.bulb(22.0)
-  mlib.translate(bl.md, [0, 0, 1.31])
-  mlib.translate(bl.md, [cx, cy, 0.0])
-  w.add(bl.md, bl.mat)
-  // Emissive-only for the same reason as tableLamp: a shadowless local point
-  // would lift the main overhead shadow uniformly instead of filling it via
-  // physically occluded indirect transport.
-  w.obb(cx, cy, 0.16, 0.16, 0)
 }
 
 function ceilingLight(w: World, cx: number, cy: number, M: MatSet, energy = 350.0, drop = 0.3, r = 0.185, kelvin = 5500.0): void {
@@ -1299,10 +1394,11 @@ export function sconce(w: World, loc: Vec3, normal: Vec2, M: MatSet, energy = 13
   const ob = mlib.join(parts)
   mlib.smoothShade(ob, 38)
   const shades: P.Placed[] = []
+  const shadeMat = mats.get('shade_emis') ?? mats.emissive('shade_emis', 'FFE6BE', { strength: 1.6, base: 'EDDFBE' })
   for (const s of [-1, 1]) {
     const sh = P.pleatedShade(0.042, 0.062, 0.075, 14)
     mlib.translate(sh, [s * 0.145, 0.11, 0.215])
-    shades.push({ md: sh, mat: mats.get('shade_emis')! })
+    shades.push({ md: sh, mat: shadeMat })
     const bl = P.bulb(16.0, 0.016)
     mlib.scaleMesh(bl.md, 0.6)
     mlib.translate(bl.md, [s * 0.145, 0.11, 0.225])
@@ -1331,116 +1427,17 @@ export function sconce(w: World, loc: Vec3, normal: Vec2, M: MatSet, energy = 13
 }
 
 // -------------------------------------------------------------------- poster
-const FONT = new FontLoader().parse(helvJson as unknown as Parameters<FontLoader['parse']>[0])
-
-function textMesh(body: string, size: number, width = 1.0, maxWidth = Infinity): MeshData {
-  const geo = new TextGeometry(body, { font: FONT, size, depth: 0.0012, curveSegments: 5 })
-  geo.computeBoundingBox()
-  const bb = geo.boundingBox!
-  const cx = (bb.min.x + bb.max.x) / 2
-  const cy = (bb.min.y + bb.max.y) / 2
-  const naturalWidth = bb.max.x - bb.min.x
-  const pos = geo.getAttribute('position')
-  const index = geo.getIndex()
-  const md = new MeshData()
-  for (let i = 0; i < pos.count; i++) {
-    md.verts.push([pos.getX(i) - cx, pos.getY(i) - cy, pos.getZ(i)])
-  }
-  if (index) {
-    for (let i = 0; i < index.count; i += 3) {
-      md.faces.push([index.getX(i), index.getX(i + 1), index.getX(i + 2)])
-    }
-  } else {
-    for (let i = 0; i < pos.count; i += 3) {
-      md.faces.push([i, i + 1, i + 2])
-    }
-  }
-  geo.dispose()
-  // Blender's built-in Bfont and Three's Helvetiker have very different
-  // advance widths. Preserve the authored size/placement, then cap each line
-  // to the print area it occupies in the Cycles reference.
-  const fittedWidth = Math.min(width, maxWidth / naturalWidth)
-  if (fittedWidth !== 1.0) mlib.scaleMesh(md, [fittedWidth, 1.0, 1.0])
-  mlib.rotX(md, Math.PI / 2)
-  return md
-}
-
 function jouetsPoster(w: World, M: MatSet): void {
-  const pw = 0.94
-  const ph = 0.68
-  const cz = 1.9
+  const pw = 1.24
+  const ph = 0.74
+  const cz = 1.81
   const gold = mats.paint('paint_poster_frame', 'C9A24A', { rough: 0.3, coat: 0.45 })
-  P.framed(w, pw, ph, [L.EX - 0.028, L.TV_C[1], cz], [-1, 0], gold, M.poster, 0.0, 0.03, 0.024)
-  const red = mats.paint('ink_red', '9A1B1E', { rough: 0.55, coat: 0.0 })
-  const dark = mats.paint('ink_dark', '2A211C', { rough: 0.6, coat: 0.0 })
-  const txt: P.Placed[] = []
-  const t1 = textMesh('AUX BUTTES CHAUMONT', 0.072, 0.92, 0.66)
-  mlib.translate(t1, [0.0, 0.0, ph * 0.34])
-  txt.push({ md: t1, mat: red })
-  const t2 = textMesh('Jouets', 0.2, 1.0, 0.48)
-  mlib.translate(t2, [0.1, 0.0, ph * 0.04])
-  txt.push({ md: t2, mat: red })
-  const t3 = textMesh('ET  OBJETS  POUR  ETRENNES', 0.042, 0.9, 0.62)
-  mlib.translate(t3, [0.13, 0.0, -ph * 0.2])
-  txt.push({ md: t3, mat: dark })
-  const t4 = textMesh('MAISON  DU  PROGRES', 0.03, 0.9, 0.42)
-  mlib.translate(t4, [0.13, 0.0, -ph * 0.33])
-  txt.push({ md: t4, mat: dark })
-  // three harlequin figures printed bottom-left
-  const rng = new PyRandom(11)
-  const cols = [
-    mats.paint('ink_fig_a', 'C43A2C', { rough: 0.58 }),
-    mats.paint('ink_fig_b', 'D8A32A', { rough: 0.58 }),
-    mats.paint('ink_fig_c', '3C4C74', { rough: 0.58 }),
-  ]
-  const figSpecs: [number, number][] = [
-    [-pw * 0.34, 1.0],
-    [-pw * 0.24, 0.86],
-    [-pw * 0.14, 0.94],
-  ]
-  figSpecs.forEach(([bx, sc], i) => {
-    const bz = -ph * 0.2 + rng.uniform(-0.01, 0.02)
-    const m2 = cols[i]
-    const skirtP: Vec2[] = [
-      [bx - 0.042 * sc, bz],
-      [bx + 0.042 * sc, bz],
-      [bx + 0.02 * sc, bz + 0.085 * sc],
-      [bx - 0.02 * sc, bz + 0.085 * sc],
-    ]
-    const torsoP: Vec2[] = [
-      [bx - 0.019 * sc, bz + 0.082 * sc],
-      [bx + 0.019 * sc, bz + 0.082 * sc],
-      [bx + 0.014 * sc, bz + 0.148 * sc],
-      [bx - 0.014 * sc, bz + 0.148 * sc],
-    ]
-    for (const pp of [skirtP, torsoP]) {
-      const fg = mlib.prismXZ(pp, 0.0, 0.0007)
-      txt.push({ md: fg, mat: m2 })
-    }
-    const hd = mlib.revolve(
-      [
-        [0.0, -0.017 * sc],
-        [0.013 * sc, -0.01 * sc],
-        [0.016 * sc, 0.0],
-        [0.013 * sc, 0.01 * sc],
-        [0.0, 0.017 * sc],
-      ],
-      12,
-    )
-    mlib.scaleMesh(hd, [1.0, 0.04, 1.0])
-    mlib.translate(hd, [bx, 0.0004, bz + 0.166 * sc])
-    txt.push({ md: hd, mat: m2 })
-  })
-  for (const ob of txt) {
-    mlib.rotateZ(ob.md, -Math.PI / 2)
-    mlib.translate(ob.md, [L.EX - 0.055, L.TV_C[1], cz])
-    w.add(ob.md, ob.mat)
-  }
+  P.framed(w, pw, ph, [L.EX - 0.028, L.TV_SET_Y, cz], [-1, 0], gold, M.poster, 0.0, 0.03, 0.024)
 }
 
 function carvedCrest(w: World): void {
-  const cw = 0.72
-  const h = 0.2
+  const cw = 0.7
+  const h = 0.16
   const pts: Vec2[] = [[-cw / 2, 0.0]]
   const n = 26
   for (let i = 0; i <= n; i++) {
@@ -1453,7 +1450,7 @@ function carvedCrest(w: World): void {
   const ob = mlib.prismXZ(pts, 0.0, 0.055)
   mlib.smoothShade(ob, 44)
   mlib.rotateZ(ob, Math.PI / 2)
-  mlib.translate(ob, [L.EX - 0.03, L.TV_C[1], 2.42])
+  mlib.translate(ob, [L.EX - 0.03, L.TV_SET_Y, 2.55])
   w.add(ob, mats.wood('wood_crest', ['6A4020', '452408', '2A1404'], { ring: 26, warp: 0.05, distort: 0.5, bump: 0.4, axis: 'YZ' }))
 }
 
@@ -1461,14 +1458,14 @@ function carvedCrest(w: World): void {
 export function build(w: World): MatSet {
   const M = mkMats()
   rug(w, M)
-  sofa(w, L.SOFA_C[0], L.SOFA_C[1], M)
-  armchair(w, L.CHAIR_ARM_WIN[0], L.CHAIR_ARM_WIN[1], rad(-96), M)
+  sofa(w, L.SOFA_C[0], L.SOFA_C[1], M, L.SOFA_L)
+  armchair(w, L.CHAIR_ARM_WIN[0], L.CHAIR_ARM_WIN[1], rad(-90), M)
   // red-and-white checked pillows on that armchair
   for (const dy of [-0.16, 0.16]) {
     const ck = mlib.cushion(0.12, 0.33, 0.34, 0.06)
     mlib.rotY(ck, rad(-20))
     mlib.translate(ck, [0.16, dy, 0.56])
-    mlib.rotateZ(ck, rad(-96))
+    mlib.rotateZ(ck, rad(-90))
     mlib.translate(ck, [L.CHAIR_ARM_WIN[0], L.CHAIR_ARM_WIN[1], 0.0])
     w.add(ck, M.check)
   }
@@ -1503,14 +1500,15 @@ export function build(w: World): MatSet {
   slipperChair(w, L.CHAIR_SLIPPER[0], L.CHAIR_SLIPPER[1], rad(L.SLIPPER_ROT), M)
   const [ofx, ofy] = L.slipperFront(0.74)
   ottoman(w, ofx, ofy, rad(L.SLIPPER_ROT), M)
-  coffeeTable(w, L.COFFEE_C[0], L.COFFEE_C[1], M)
+  coffeeTable(w, L.COFFEE_C[0], L.COFFEE_C[1], M, 0.88, L.COFFEE_D)
   glassTable(w, L.GLASS_T[0], L.GLASS_T[1], M)
   ceilingLight(w, L.CHANDELIER[0], L.CHANDELIER[1], M, 350.0, 0.3, 0.185, 5500.0)
   credenza(w, M)
-  crtTv(w, 8.27, L.TV_C[1], 0.9, M)
-  speaker(w, 7.98, L.TV_C[1] - L.CRED_HW - 0.18, M)
+  crtTv(w, 8.23, L.TV_SET_Y, 0.9, M, 0.8, 0.62, 0.64)
+  speaker(w, 8.245, L.TV_C[1] - L.CRED_HW - 0.19, M)
   windowSeat(w, M)
   consoleTable(w, M)
+  doorWall(w, M)
   jouetsPoster(w, M)
   carvedCrest(w)
   // the pair of gilt-framed botanicals south of Rachel's doorway
@@ -1547,20 +1545,19 @@ export function build(w: World): MatSet {
   })
   // lamps
   tableLamp(w, (L.BW_X[0] + L.BW_X[1]) * 0.5 + 0.46, L.AL_Y[1] - L.SEAT_D - 0.3, 0.715, M, 24.0)
-  floorLamp(w, L.AL_X[1] - 0.25, L.AL_Y[1] - 0.85, M, 30.0)
-  sconce(w, [L.HALL_X[1] + 0.185, 4.3, 1.72], [0, -1], M)
-  // drapes at the alcove opening: two panels + swag valance
+  sconce(w, [L.HALL_X[0] + 0.02, L.NW_Y - 0.5, 1.86], [1, 0], M)
+  // Drapes now sit close to the glass and outside the window-seat ends.
   const drapeSpans: [number, number][] = [
-    [L.AL_X[0] + 0.04, L.AL_X[0] + 0.62],
-    [L.AL_X[1] - 0.62, L.AL_X[1] - 0.04],
+    [L.AL_X[0] + 0.02, L.BW_X[0] - 0.12],
+    [L.BW_X[1] + 0.12, L.AL_X[1] - 0.03],
   ]
   drapeSpans.forEach(([a, b2], k) => {
-    const dp = P.curtainPanel(a, b2, L.AL_Z - 0.06, 0.004, 0.16, 5, 0.5, 1.35, 11 + k, 0.016, 2.4)
-    mlib.translate(dp, [0, L.NY + 0.1, 0])
+    const dp = P.curtainPanel(a, b2, L.AL_Z - 0.06, 0.004, 0.14, 4, 0.5, 1.35, 11 + k, 0.016, 2.4)
+    mlib.translate(dp, [0, L.AL_S + 0.13, 0])
     w.add(dp, M.drape)
   })
   const sw = P.swag(L.AL_X[0] + 0.3, L.AL_X[1] - 0.3, L.AL_Z - 0.04, 0.22, 0.13, 8)
-  mlib.translate(sw, [0, L.NY + 0.08, 0])
+  mlib.translate(sw, [0, L.AL_S + 0.11, 0])
   w.add(sw, M.drape)
   // curtain rod
   const rod = mlib.revolve(
@@ -1573,12 +1570,12 @@ export function build(w: World): MatSet {
     14,
   )
   mlib.rotY(rod, Math.PI / 2)
-  mlib.translate(rod, [L.AL_X[0], L.NY + 0.13, L.AL_Z - 0.02])
+  mlib.translate(rod, [L.AL_X[0], L.AL_S + 0.16, L.AL_Z - 0.02])
   mlib.smoothShade(rod, 34)
   w.add(rod, mats.wood('wood_rod', ['5A3418', '3A1E0A', '221004'], { ring: 60, warp: 0.03, bump: 0.2, axis: 'YZ' }))
   // plants
-  P.fern(w, [7.86, L.TV_C[1] + L.CRED_HW + 0.3, 0.55 * 0.62], 0.55, 34, 3, true, M.leaf, M.terra)
-  P.trailingPlant(w, [7.98, L.TV_C[1] - L.CRED_HW - 0.18, 0.52], 12, 5, M.leaf, M.wicker, 0.1)
+  P.fern(w, [8.12, L.TV_C[1] + 1.02, 0.9 + 0.32 * 0.62], 0.32, 30, 3, true, M.leaf, M.terra)
+  P.trailingPlant(w, [8.245, L.TV_C[1] - L.CRED_HW - 0.19, 0.824], 14, 6, M.leaf, M.wicker, 0.13)
   // two small bronze figures on the credenza top beside the vase
   const figs: [number, number, number][] = [
     [0.32, 0.155, 0.03],

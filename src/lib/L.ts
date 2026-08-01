@@ -12,11 +12,22 @@ export const BASE_H = 0.155 // baseboard
 export const TW = 0.26 // exterior wall thickness
 export const TP = 0.16 // partition thickness
 
-export const SY = -1.45 // south ('back') wall inner face
 export const EX = 8.55 // central wall, west face
 export const EXW = 8.77 // central wall, east face
 export const EXT_E = 11.8 // east exterior wall, inner face
 export const NYW = 6.15 // north exterior wall, inner face
+export const NY = 4.62 // kitchen north wall / bathroom south wall
+export const NW_Y = 7.05 // north wall of the bathroom / hallway block
+
+// --- central wall, laid out north to south -------------------------------
+export const MD_WALL_W = 1.1
+export const MD_W = 0.95
+export const AL_S = 5.62 // south line of the window bay
+export const MD_WALL: [number, number] = [AL_S - MD_WALL_W, AL_S]
+export const MD_Y: [number, number] = [MD_WALL[0] - MD_W, MD_WALL[0]]
+export const CD_Y: [number, number] = [-1.48, -0.53]
+export const SY = -3.68 // south ('back') wall, 9.83 m deep
+export const TV_WALL: [number, number] = [CD_Y[1], MD_Y[0]]
 
 // --- west wall -------------------------------------------------------------
 export const WX = 0.0
@@ -43,7 +54,6 @@ export const KW_U: [number, number] = [0.245, 1.195]
 export const KW_Z: [number, number] = [0.99, 2.34]
 
 // --- north wall ------------------------------------------------------------
-export const NY = 4.62
 export const N_BRICK: [number, number] = [1.02, 3.24]
 export const FRIDGE_X: [number, number] = [2.36, 3.1]
 
@@ -64,30 +74,28 @@ export const BEAM_Y: [number, number] = [SY, 4.05]
 export const POST_X: [number, number] = [3.46, 3.66]
 
 // --- window alcove ---------------------------------------------------------
-export const AL_X: [number, number] = [4.62, EX] // runs right up to the central wall
-export const AL_Y: [number, number] = [4.62, NYW]
+export const AL_X: [number, number] = [HALL_X[1], EX] // runs from the hall to the central wall
+export const AL_Y: [number, number] = [AL_S, NYW]
 export const AL_Z = 2.86
 export const BW_X: [number, number] = [4.9, 7.98]
 export const BW_SILL = 0.6
-export const BW_TOP = 1.92
-export const RAKE_Y = 5.4
+export const BW_HEAD = AL_Z
+export const BW_TOP = BW_HEAD
+export const BW_TILT = (6.0 * Math.PI) / 180
+export const BW_LEAN = (BW_HEAD - BW_SILL) * Math.tan(BW_TILT)
 export const SEAT_H = 0.46
 export const SEAT_D = 0.62
 
 // --- doors through the central wall ---------------------------------------
-// AXIS is the flat's north-south centre line: the wall that splits the two
-// bedrooms sits on it, the TV/credenza is centred on it from the living-room
-// side, and the sofa faces straight down it.
-export const AXIS = (SY + 6.15) * 0.5 // 2.35
-export const CD_Y: [number, number] = [0.32, 1.24] // cased opening -> Rachel's bedroom
+export const AXIS = (SY + NYW) * 0.5
 export const CD_H = 2.06
 export const CD_TOP = 2.52
-export const MD_Y: [number, number] = [5.14, 5.96] // door -> Monica's bedroom (from the alcove)
 export const MD_H = 2.06
+export const MD_TOP = 2.52
 
 // --- bathroom --------------------------------------------------------------
 export const BA_X: [number, number] = [1.02, 3.24]
-export const BA_Y: [number, number] = [4.78, 6.03]
+export const BA_Y: [number, number] = [4.78, NW_Y]
 
 // --- bedrooms (east block, split by a wall as on the plan) -----------------
 export const BED_X: [number, number] = [EXW, EXT_E]
@@ -100,24 +108,28 @@ export const BED_W = 1.42 // bed width (along Y)
 export const BED_L = 2.0 // bed length (along X), head against the east wall
 
 // --- furniture anchors -----------------------------------------------------
-// everything in the seating group is hung off AXIS so the sofa, the coffee
-// table, the rug, the chandelier and the TV all share one centre line.
-export const SOFA_C: [number, number] = [4.42, AXIS] // cream sofa centre, faces +X
-export const COFFEE_C: [number, number] = [5.72, AXIS]
-export const RUG_C: [number, number] = [5.82, AXIS]
-export const RUG_WH: [number, number] = [2.98, 4.2]
-export const TV_C: [number, number] = [8.3, AXIS]
-export const CRED_HW = 0.7 // half-length of the waterfall credenza
-export const TABLE_C: [number, number] = [2.14, 2.2] // round kitchen table
-export const CHAIR_ARM_WIN: [number, number] = [5.6, 4.14] // armchair below the alcove
-// The slipper chair sits at the rug's south-east corner, turned across it, with
-// its footstool in front.
-export const CHAIR_SLIPPER: [number, number] = [7.95, -0.58]
+export const RUG_W = 2.98
+export const RUG_D0 = 4.2
+export const SOFA_L0 = 2.32
+export const GROW = SOFA_L0 / 3
+export const SIT_N = 3.56
+export const SOFA_L = SOFA_L0 + GROW
+export const COFFEE_D = 1.2 + GROW
+export const RUG_WH: [number, number] = [RUG_W, RUG_D0 + GROW]
+export const SIT_C = SIT_N - RUG_WH[1] * 0.5
+export const SOFA_C: [number, number] = [4.42, SIT_C]
+export const COFFEE_C: [number, number] = [5.72, SIT_C]
+export const RUG_C: [number, number] = [5.82, SIT_C]
+export const TV_C: [number, number] = [8.3, (TV_WALL[0] + TV_WALL[1]) * 0.5]
+export const CRED_HW = (TV_WALL[1] - TV_WALL[0]) * 0.5 - 0.72
+export const TV_SET_Y = TV_C[1] - 0.26
+export const TABLE_C: [number, number] = [2.48, 1.75]
+export const CHAIR_ARM_WIN: [number, number] = [5.72, SIT_N + 0.06 - 0.504]
+export const CHAIR_SLIPPER: [number, number] = [7.95, CD_Y[0] - 0.75]
 export const SLIPPER_ROT = 133.0
-// Off the sofa's south end and squared up with it.
-export const GLASS_T: [number, number] = [4.42, 0.76] // wrought-iron glass table off the sofa's south arm
-export const STOOLS: [number, number] = [5.98, 0.98] // the pair of stacked tapestry stools
-export const CHANDELIER: [number, number] = [5.86, AXIS] // over the living room
+export const GLASS_T: [number, number] = [SOFA_C[0], SOFA_C[1] - SOFA_L / 2 - 0.095 - 0.302]
+export const STOOLS: [number, number] = [5.98, SIT_C - 1.37]
+export const CHANDELIER: [number, number] = [5.86, SIT_C]
 
 // palette ------------------------------------------------------------------
 export const LAV = '9E98C4'

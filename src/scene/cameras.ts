@@ -29,6 +29,9 @@ const CAMERAS = {
   rachel: { location: [7.4, 1.55, 1.55], target: [11.2, 0.9, 1.05], lens: 24 },
   mon_in: { location: [9.1, 3.3, 1.55], target: [11.4, 5.2, 1.0], lens: 22 },
   rac_in: { location: [9.1, 2.2, 1.55], target: [11.4, 0.3, 1.0], lens: 22 },
+  slipper: { location: [6.55, -0.72, 1.38], target: [7.95, -2.23, 0.55], lens: 38 },
+  slipper_far: { location: [5.35, 0.25, 1.52], target: [7.95, -2.23, 0.62], lens: 42 },
+  bed_foot: { location: [7.92, -1.18, 1.42], target: [10.28, -1.25, 0.58], lens: 38 },
 } satisfies Record<string, CameraSpec>
 
 export type CameraBookmark = keyof typeof CAMERAS

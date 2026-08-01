@@ -497,6 +497,27 @@ export function framed(
     parts.push({ md: mb, mat: matmat ?? mats.paint('mount_cream', 'EDE6D2', { rough: 0.75, coat: 0.0 }) })
   }
   const art = mlib.box(-width / 2 + 0.004, fd * 0.3, -h / 2 + 0.004, width / 2 - 0.004, fd * 0.3 + 0.003, h / 2 - 0.004)
+  // Give both paper faces a full, consistently oriented UV rectangle. Most
+  // art remains procedural, while asset-backed pieces (the Jouets poster) can
+  // now use the same dimensioned frame without a bespoke render mesh.
+  art.uvs = [
+    null,
+    null,
+    [
+      [0, 0],
+      [1, 0],
+      [1, 1],
+      [0, 1],
+    ],
+    null,
+    [
+      [0, 0],
+      [1, 0],
+      [1, 1],
+      [0, 1],
+    ],
+    null,
+  ]
   parts.push({ md: art, mat: artmat! })
   const ang = Math.atan2(normal[1], normal[0]) - Math.PI / 2
   for (const ob of parts) {

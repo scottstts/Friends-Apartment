@@ -36,6 +36,7 @@ export class World {
   lights: THREE.Light[] = []
 
   add(md: MeshData, mat: THREE.Material, opts: AddOpts = {}): MeshData {
+    if (!mat) throw new Error('World.add requires a material')
     if (opts.collide) this.colliderFromMesh(md, opts.collidePad ?? 0)
     if (opts.at) {
       this.separate.push({ md, mat, at: opts.at })
