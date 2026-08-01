@@ -51,6 +51,18 @@ export class World {
     return md
   }
 
+  /** Remove an unfinalized mesh from its material bucket. Dressing builders
+   * use this for the same deterministic post-scatter culls as the Blender
+   * object collection. */
+  remove(md: MeshData, mat: THREE.Material): boolean {
+    const list = this.buckets.get(mat)
+    if (!list) return false
+    const index = list.indexOf(md)
+    if (index < 0) return false
+    list.splice(index, 1)
+    return true
+  }
+
   /** Multi-material object (face_mat walls): split faces per material slot. */
   addMulti(md: MeshData, mats: THREE.Material[], opts: AddOpts = {}): void {
     if (opts.collide) this.colliderFromMesh(md, opts.collidePad ?? 0)

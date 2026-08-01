@@ -186,7 +186,7 @@ function dishRack(w: World, loc: Vec3, rotz = 0.0, n = 7): void {
     )
     mlib.rotY(pl, Math.PI / 2)
     mlib.smoothShade(pl, 32)
-    mlib.translate(pl, [-0.09 + i * 0.055, 0.0, 0.1])
+    mlib.translate(pl, [-0.09 + i * 0.055, 0.0, 0.116])
     mlib.rotateZ(pl, rotz)
     mlib.translate(pl, loc)
     w.add(pl, pm)
@@ -232,8 +232,11 @@ function knifeBlock(w: World, loc: Vec3, rotz = 0.0): void {
   }
 }
 
-function paperTowel(w: World, loc: Vec3): void {
+function paperTowel(w: World, loc: Vec3, hang?: number): void {
   const pm = mats.paint('paper_white', 'F0EDE4', { rough: 0.62 })
+  const chrome = mats.get('metal_chrome')!
+  const at: Vec3 = hang === undefined ? loc : [loc[0], loc[1], hang - 0.058 - 0.014]
+  const placed: [MeshData, THREE.Material][] = []
   const rod = mlib.revolve(
     [
       [0.0, 0.0],
@@ -244,8 +247,7 @@ function paperTowel(w: World, loc: Vec3): void {
     10,
   )
   mlib.rotX(rod, -Math.PI / 2)
-  mlib.translate(rod, loc)
-  w.add(rod, mats.get('metal_chrome')!)
+  placed.push([rod, chrome])
   const roll = mlib.revolve(
     [
       [0.024, 0.0],
@@ -258,8 +260,25 @@ function paperTowel(w: World, loc: Vec3): void {
   mlib.rotX(roll, -Math.PI / 2)
   mlib.translate(roll, [0, 0.028, 0])
   mlib.smoothShade(roll, 24)
-  mlib.translate(roll, loc)
-  w.add(roll, pm)
+  placed.push([roll, pm])
+  if (hang !== undefined) {
+    for (const sy of [0.004, 0.296]) {
+      const bracket = mlib.tubeAlong(
+        [
+          [0, sy, 0],
+          [0, sy, hang - at[2] - 0.004],
+          [-0.026, sy, hang - at[2] + 0.002],
+        ],
+        mlib.circle(0.006, 8),
+      )
+      mlib.smoothShade(bracket, 36)
+      placed.push([bracket, chrome])
+    }
+  }
+  for (const [ob, mat] of placed) {
+    mlib.translate(ob, at)
+    w.add(ob, mat)
+  }
 }
 
 function toaster(w: World, loc: Vec3, rotz = 0.0): void {
@@ -394,19 +413,19 @@ function strapFrame(w: World, loc: Vec3, fw = 0.205, fh = 0.145): void {
 }
 
 export function build(w: World): void {
-  const { dir, len: cl } = L.chamferDir()
+  const { dir } = L.chamferDir()
   const [dxc, dyc] = dir
   const inw = Math.atan2(-dxc, dyc)
   // north-run counter: coffee maker, mixer, toaster, knife block
-  coffeeMaker(w, [1.28, L.NY - 0.34, CTR_H], rad(4))
-  standMixer(w, [1.72, L.NY - 0.34, CTR_H], rad(-14))
-  toaster(w, [2.06, L.NY - 0.32, CTR_H], rad(8))
-  const kp = L.chamferPt(0.3, 0.3)
+  coffeeMaker(w, [1.5, L.NY - 0.34, CTR_H], rad(4))
+  standMixer(w, [1.75, L.NY - 0.34, CTR_H], rad(-14))
+  toaster(w, [2.01, L.NY - 0.34, CTR_H], rad(8))
+  const kp = L.chamferPt(0.155, 0.3)
   knifeBlock(w, [kp[0], kp[1], CTR_H], inw + rad(10))
   // chamfer counter beside the sink: dish rack + paper towel
-  const p = L.chamferPt(cl - 0.3, 0.34)
-  dishRack(w, [p[0], p[1], CTR_H + 0.002], inw + rad(-8))
-  paperTowel(w, [0.095, L.KIT_WEDGE[0] + 0.3, 1.395])
+  const p = L.chamferPt(1.3, 0.34)
+  dishRack(w, [p[0], p[1], CTR_H + 0.004], inw + rad(-8))
+  paperTowel(w, [0.095, L.KIT_WEDGE[0] + 0.3, 0], 1.34)
   // the lavender wall north of the front door: coat hook and hanging frame
   const my = (L.FD_Y[1] + L.W_PLASTER[1]) * 0.5
   coatHook(w, [0.02, my + 0.012, 1.8])

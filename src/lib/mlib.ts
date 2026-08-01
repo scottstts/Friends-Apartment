@@ -521,6 +521,70 @@ export function annularPrism(outerPoly: Vec2[], innerPoly: Vec2[], z0: number, z
   return m
 }
 
+/** A through-cut z-prism whose outer top/bottom edges may be rounded while the
+ * aperture stays sharp. The two CCW outlines must have matching semantic
+ * corners so each annular cap can bridge them without an unrelated cut frame. */
+export function aperturedPrism(
+  outerPoly: Vec2[],
+  innerPoly: Vec2[],
+  z0: number,
+  z1: number,
+  outerBevel = 0,
+  bevelSegments = 1,
+): MeshData {
+  const n = outerPoly.length
+  if (innerPoly.length !== n) throw new Error('aperturedPrism: outline vertex counts must match')
+
+  const radius = Math.max(0, Math.min(outerBevel, (z1 - z0) / 2 - 1e-5))
+  const segments = Math.max(1, bevelSegments)
+  const outerLevels: { inset: number; z: number }[] = []
+  if (radius > 0) {
+    for (let k = 0; k <= segments; k++) {
+      const a = (Math.PI / 2) * (k / segments)
+      outerLevels.push({ inset: radius * (1 - Math.sin(a)), z: z0 + radius * (1 - Math.cos(a)) })
+    }
+    for (let k = 0; k <= segments; k++) {
+      const a = (Math.PI / 2) * (k / segments)
+      outerLevels.push({ inset: radius * (1 - Math.cos(a)), z: z1 - radius * (1 - Math.sin(a)) })
+    }
+  } else {
+    outerLevels.push({ inset: 0, z: z0 }, { inset: 0, z: z1 })
+  }
+
+  const verts: Vec3[] = []
+  for (const level of outerLevels) {
+    for (const [x, y] of insetPolyLocal(outerPoly, level.inset)) verts.push([x, y, level.z])
+  }
+  const innerBottom = verts.length
+  for (const [x, y] of innerPoly) verts.push([x, y, z0])
+  const innerTop = verts.length
+  for (const [x, y] of innerPoly) verts.push([x, y, z1])
+
+  const faces: number[][] = []
+  for (let level = 0; level < outerLevels.length - 1; level++) {
+    const a = level * n
+    const b = (level + 1) * n
+    for (let j = 0; j < n; j++) {
+      const j2 = (j + 1) % n
+      faces.push([a + j, a + j2, b + j2, b + j])
+    }
+  }
+
+  const outerBottom = 0
+  const outerTop = (outerLevels.length - 1) * n
+  for (let j = 0; j < n; j++) {
+    const j2 = (j + 1) % n
+    faces.push([innerBottom + j2, innerBottom + j, innerTop + j, innerTop + j2])
+    faces.push([outerBottom + j2, outerBottom + j, innerBottom + j, innerBottom + j2])
+    faces.push([outerTop + j, outerTop + j2, innerTop + j2, innerTop + j])
+  }
+
+  const m = MeshData.from(verts, faces)
+  recalcNormals(m)
+  if (radius > 0) smoothShade(m, 40)
+  return m
+}
+
 function insetPolyLocal(poly: Vec2[], d: number): Vec2[] {
   const n = poly.length
   const out: Vec2[] = []

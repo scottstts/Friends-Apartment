@@ -5,6 +5,51 @@ import mlib, mats, L, s_floor, s_walls as W
 CZ, RAIL, TW, TP = L.CZ, L.RAIL, L.TW, L.TP
 
 
+def trim_floor(par):
+    """Cut the parquet back to the building's own footprint.
+
+    The slab is generated as one big rectangle so the board lattice comes out
+    continuous, but the flat is not a rectangle - the kitchen's north-west
+    corner is cut off on the diagonal, and past that chamfer the boards ran
+    metres out into open air, right across the kitchen window, where they read
+    through the glass as a floor floating outside the building.
+
+    Rather than hand-write the outline, ask the shell itself: shoot a ray
+    straight up from every tile and keep the tile only if there is a wall or a
+    ceiling over it.  That keeps the boards running under the walls, where they
+    have to, and drops everything with nothing above it.  Done by deleting
+    faces rather than with a boolean because the parquet is tens of thousands
+    of separate tile pieces and the EXACT solver hands such a mesh straight
+    back unchanged.
+    """
+    import bmesh
+    from mathutils import Vector
+    from mathutils.bvhtree import BVHTree
+    V, F = [], []
+    for o in bpy.data.objects:
+        if o.type != 'MESH' or not o.name.startswith(("W_", "C_")):
+            continue
+        m = o.matrix_world
+        base = len(V)
+        V += [tuple(m @ v.co) for v in o.data.vertices]
+        F += [tuple(base + i for i in p.vertices) for p in o.data.polygons]
+    bvh = BVHTree.FromPolygons(V, F, all_triangles=False)
+    up = Vector((0.0, 0.0, 1.0))
+    bm = bmesh.new()
+    bm.from_mesh(par.data)
+    kill = []
+    for f in bm.faces:
+        c = f.calc_center_median()
+        if bvh.ray_cast(Vector((c.x, c.y, c.z + 0.02)), up, 40.0)[0] is None:
+            kill.append(f)
+    bmesh.ops.delete(bm, geom=kill, context='FACES')
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces],
+                     context='VERTS')
+    bm.to_mesh(par.data)
+    bm.free()
+    par.data.update()
+
+
 # ------------------------------------------------------------------- materials
 def build_mats():
     M = {}
@@ -63,7 +108,8 @@ def build():
     M = build_mats()
 
     # ---------------------------------------------------------------- floor
-    sub = mlib.box("Floor_Sub", -0.6, L.SY - 0.6, -0.02, 12.4, 7.1, 0.0035, "Shell")
+    sub = mlib.box("Floor_Sub", -0.32, L.SY - 0.32, -0.02, 11.95, 7.15, 0.0035,
+                   "Shell")
     mlib.set_mat(sub, mats.paint('subfloor_dark', '2A1F16', rough=0.8))
     # 0.52 m module: the set's parquet reads big - roughly one tile per stride -
     # and at 0.445 the lattice was fussy enough to shimmer in the wide shots
@@ -71,6 +117,8 @@ def build():
     # own north wall, and at 6.9 the boards stopped short of the new hallway.
     par = s_floor.build(-0.45, L.SY - 0.45, 12.3, L.NW_Y + 0.55, T=0.52)
     mlib.set_mat(par, M['parquet'])
+    # (trimmed to the building's footprint at the end of this function, once
+    # the walls and ceilings that define that footprint exist)
 
     # ---------------------------------------------------------------- walls
     # -- west: lavender front-door wall (split at the picture rail)
@@ -363,14 +411,22 @@ def build():
                           1.52, "Kitchen"))
     tiles.append(mlib.box("K_tile_n", L.N_BRICK[0], L.NY - 0.0135, 0.86,
                           L.FRIDGE_X[0], L.NY - 0.0015, 1.52, "Kitchen"))
-    ct = mlib.prism("K_tile_ch", [L.chamfer_pt(0.02, 0.0015),
-                                  L.chamfer_pt(1.40, 0.0015),
-                                  L.chamfer_pt(1.40, 0.0135),
-                                  L.chamfer_pt(0.02, 0.0135)], 0.86, 1.52,
-                    "Kitchen")
-    tiles.append(ct)
+    # The chamfer splash has the kitchen window in it.  As one slab from 0.86 to
+    # 1.52 it ran straight across the opening and bricked up the bottom 530 mm
+    # of the glazing with white tile.  Three pieces: a band under the sill, then
+    # the two returns beside the reveals.  Each runs 4 mm into the opening so
+    # the casing laps the cut instead of leaving a grout line at the jamb.
+    for tag, u0, u1, z0, z1 in (
+            ("a", 0.02, 1.40, 0.86, L.KW_Z[0]),
+            ("b", 0.02, L.KW_U[0] + 0.004, L.KW_Z[0], 1.52),
+            ("c", L.KW_U[1] - 0.004, 1.40, L.KW_Z[0], 1.52)):
+        tiles.append(mlib.prism("K_tile_ch" + tag,
+                                [L.chamfer_pt(u0, 0.0015), L.chamfer_pt(u1, 0.0015),
+                                 L.chamfer_pt(u1, 0.0135), L.chamfer_pt(u0, 0.0135)],
+                                z0, z1, "Kitchen"))
     for t in tiles:
         mlib.set_mat(t, M['tile'])
 
+    trim_floor(par)
     print("shell built:", len(bpy.data.objects), "objects")
     return M

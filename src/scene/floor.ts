@@ -64,6 +64,7 @@ export function buildParquet(
   gap = 0.0014,
   th = 0.0095,
   ang = Math.PI / 4,
+  covered?: (x: number, y: number) => boolean,
 ): MeshData {
   const ca = Math.cos(ang)
   const sa = Math.sin(ang)
@@ -113,14 +114,18 @@ export function buildParquet(
         const cy = wp.reduce((s2, p) => s2 + p[1], 0) / wp.length
         if (!(x0 - 0.35 < cx && cx < x1 + 0.35 && y0 - 0.35 < cy && cy < y1 + 0.35)) continue
         wp = insetPoly(wp, gap * 0.5)
-        const n = wp.length
-        const base = verts.length
-        for (const [px, py] of wp) verts.push([px, py, 0])
-        for (const [px, py] of wp) verts.push([px, py, th])
         const gx = gd[0] * ca - gd[1] * sa
         const gy = gd[0] * sa + gd[1] * ca
         const ro: Vec2 = [rng.uniform(-9, 9), rng.uniform(-9, 9)]
         const t = tint()
+        // Blender builds the full continuous lattice and trims it afterwards.
+        // Consume the same seeded draws even for pieces outside the shell so
+        // every retained board keeps its original grain offset and tone.
+        if (covered && !covered(cx, cy)) continue
+        const n = wp.length
+        const base = verts.length
+        for (const [px, py] of wp) verts.push([px, py, 0])
+        for (const [px, py] of wp) verts.push([px, py, th])
         const uvOf = (px: number, py: number): Vec2 => {
           const across = px * -gy + py * gx
           const along = px * gx + py * gy

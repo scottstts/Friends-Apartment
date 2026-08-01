@@ -118,7 +118,9 @@ def dish_rack(name, loc, rotz=0.0, cname=C, n=7):
         mlib.rot_y(pl, math.pi / 2)
         mlib.smooth_shade(pl, 32)
         mlib.set_mat(pl, pm)
-        mlib.translate(pl, (-0.09 + i * 0.055, 0.0, 0.10))
+        # sitting in the rack, not through the worktop: at 0.10 a 108 mm plate
+        # reached 8 mm below the rack's own base and so 6 mm into the counter
+        mlib.translate(pl, (-0.09 + i * 0.055, 0.0, 0.116))
         mlib.rotate_z(pl, rotz)
         mlib.translate(pl, loc)
         out.append(pl)
@@ -151,21 +153,40 @@ def knife_block(name, loc, rotz=0.0, cname=C):
     return objs
 
 
-def paper_towel(name, loc, cname=C):
+def paper_towel(name, loc, cname=C, hang=None):
+    """`hang` is the underside of the shelf it swings from.  Without it the rod
+    was pinned at the shelf's own height and the roll ran straight through the
+    board - 116 mm of towel occupying the same space as 20 mm of pine."""
     pm = mats.paint('paper_white', 'F0EDE4', rough=0.62)
+    chrome = mats.get('metal_chrome')
+    if hang is not None:
+        loc = (loc[0], loc[1], hang - 0.058 - 0.014)
+    parts = []
     rod = mlib.revolve(name + "_rod", [(0.0, 0.0), (0.008, 0.0), (0.008, 0.30),
                                        (0.0, 0.30)], 10, cname=cname)
     mlib.rot_x(rod, -math.pi / 2)
-    mlib.set_mat(rod, mats.get('metal_chrome'))
+    mlib.set_mat(rod, chrome)
+    parts.append(rod)
     roll = mlib.revolve(name + "_roll", [(0.024, 0.0), (0.058, 0.0), (0.058, 0.245),
                                         (0.024, 0.245)], 24, cname=cname)
     mlib.rot_x(roll, -math.pi / 2)
     mlib.translate(roll, (0, 0.028, 0))
     mlib.smooth_shade(roll, 24)
     mlib.set_mat(roll, pm)
-    for o in (rod, roll):
+    parts.append(roll)
+    if hang is not None:
+        # the two straps it actually hangs by
+        for sy in (0.004, 0.296):
+            br = mlib.tube_along(name + "_br",
+                                 [(0.0, sy, 0.0), (0.0, sy, hang - loc[2] - 0.004),
+                                  (-0.026, sy, hang - loc[2] + 0.002)],
+                                 mlib.circle(0.006, 8), cname)
+            mlib.smooth_shade(br, 36)
+            mlib.set_mat(br, chrome)
+            parts.append(br)
+    for o in parts:
         mlib.translate(o, loc)
-    return [rod, roll]
+    return parts
 
 
 def wreath(name, loc, r=0.15, cname=C):
@@ -309,15 +330,29 @@ def build():
     (dxc, dyc), cl = L.chamfer_dir()
     inw = math.atan2(-dxc, dyc)          # facing into the room off the chamfer
     # north-run counter: coffee maker, mixer, toaster, knife block
-    coffee_maker("X_coffee", (1.28, L.NY - 0.34, CTR_H), math.radians(4))
-    stand_mixer("X_mixer", (1.72, L.NY - 0.34, CTR_H), math.radians(-14))
-    toaster("X_toaster", (2.06, L.NY - 0.32, CTR_H), math.radians(8))
-    kp = L.chamfer_pt(0.30, 0.30)
+    # The three of them shifted east and closed up.  The coffee maker stood at
+    # 1.28, which is where the dish rack has to be - hard by the sink - and the
+    # rack was cutting through it.  Packing them together also opens one real
+    # 250 mm stretch of bare counter in the corner by the fridge, which is the
+    # only place left on a 1.33 m run for the loose crockery to stand.
+    coffee_maker("X_coffee", (1.50, L.NY - 0.34, CTR_H), math.radians(4))
+    stand_mixer("X_mixer", (1.75, L.NY - 0.34, CTR_H), math.radians(-14))
+    toaster("X_toaster", (2.01, L.NY - 0.34, CTR_H), math.radians(8))
+    # The sink's rim runs from u = 0.324 to u = 1.104 along the chamfer, so
+    # both of these were standing on it: the block's near corner was 100 mm
+    # inside the rim and the rack straddled it by 106 mm.  They sit on the
+    # worktop each side of it now, the rack carried round onto the north run's
+    # corner because 320 mm of chamfer is not enough for a 340 mm rack.
+    kp = L.chamfer_pt(0.155, 0.30)
     knife_block("X_knives", (kp[0], kp[1], CTR_H), inw + math.radians(10))
     # chamfer counter beside the sink: dish rack + paper towel
-    p = L.chamfer_pt(cl - 0.30, 0.34)
-    dish_rack("X_rack", (p[0], p[1], CTR_H + 0.002), inw + math.radians(-8))
-    paper_towel("X_ptowel", (0.095, L.KIT_WEDGE[0] + 0.30, 1.395))
+    # far enough past the sink's rim (which ends at u = 1.104) that the 8 deg
+    # skew on the rack does not swing its near corner back over the steel
+    p = L.chamfer_pt(1.30, 0.34)
+    # +4 mm, not +2: the base rails are 3.5 mm tubes drawn on their centreline,
+    # so at +2 the wire was buried a millimetre and a half in the butcher block
+    dish_rack("X_rack", (p[0], p[1], CTR_H + 0.004), inw + math.radians(-8))
+    paper_towel("X_ptowel", (0.095, L.KIT_WEDGE[0] + 0.30, 0.0), hang=1.34)
     # (a wreath used to hang in the kitchen window.  kitchen2 shows that window
     # square on and entirely unobstructed - swagged curtain, plain glazing, the
     # pendant in front of it - so there is nothing to hang there.)

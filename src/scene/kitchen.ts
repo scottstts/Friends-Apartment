@@ -17,6 +17,9 @@ const TOE = L.TOE
 const TOP_T = 0.042
 const SHELF_BAYS = 4
 const SHELF_TIERS = [3, 4, 4, 3]
+const SINK_BOWL_OFFSET = 0.188
+const SINK_HX = 0.1725
+const SINK_HY = 0.1875
 
 function rad(d: number): number {
   return (d * Math.PI) / 180
@@ -104,37 +107,88 @@ function barPull(ln = 0.135): MeshData {
   return ob
 }
 
-function baseRun(
-  w: World,
-  p0: Vec2,
-  p1: Vec2,
-  M: MatSet,
-  doors = 2,
-  drawers = 0,
-  drH = 0.16,
-  depth = CTR_D,
-  top = true,
-  topMat?: THREE.Material,
-): void {
+type Run = [Vec2, Vec2]
+
+interface BaseRunOptions {
+  doors?: number
+  drawers?: number
+  drH?: number
+  depth?: number
+  top?: boolean
+  topMat?: THREE.Material
+  mitre?: [Run | null, Run | null]
+  cut?: { poly: Vec2[]; z0: number }
+}
+
+function lineIntersection(p: Vec2, d: Vec2, q: Vec2, e: Vec2): Vec2 {
+  const den = d[0] * e[1] - d[1] * e[0]
+  const t = ((q[0] - p[0]) * e[1] - (q[1] - p[1]) * e[0]) / den
+  return [p[0] + d[0] * t, p[1] + d[1] * t]
+}
+
+function runFrame([p0, p1]: Run): { u: Vec2; n: Vec2; len: number } {
   const dx = p1[0] - p0[0]
   const dy = p1[1] - p0[1]
-  const ln = Math.hypot(dx, dy)
-  const ux = dx / ln
-  const uy = dy / ln
-  const nx = uy
-  const ny = -ux // into the room
+  const len = Math.hypot(dx, dy)
+  const u: Vec2 = [dx / len, dy / len]
+  return { u, n: [u[1], -u[0]], len }
+}
+
+function baseRun(w: World, run: Run, M: MatSet, options: BaseRunOptions = {}): void {
+  const {
+    doors = 2,
+    drawers = 0,
+    drH = 0.16,
+    depth = CTR_D,
+    top = true,
+    topMat,
+    mitre = [null, null],
+    cut,
+  } = options
+  const [p0] = run
+  const { u, n, len } = runFrame(run)
+  const span = (off: number, pad = 0): [number, number] => {
+    const a: Vec2 = [p0[0] + n[0] * off, p0[1] + n[1] * off]
+    return mitre.map((neighbor, end) => {
+      if (!neighbor) return end === 0 ? -pad : len + pad
+      const neighborFrame = runFrame(neighbor)
+      const q: Vec2 = [
+        neighbor[0][0] + neighborFrame.n[0] * off,
+        neighbor[0][1] + neighborFrame.n[1] * off,
+      ]
+      const p = lineIntersection(a, u, q, neighborFrame.u)
+      return (p[0] - a[0]) * u[0] + (p[1] - a[1]) * u[1]
+    }) as [number, number]
+  }
+  const poly = (back: number, front: number, pad = 0): Vec2[] => {
+    const [b0, b1] = span(back, pad)
+    const [f0, f1] = span(front, pad)
+    const point = (off: number, t: number): Vec2 => [
+      p0[0] + n[0] * off + u[0] * t,
+      p0[1] + n[1] * off + u[1] * t,
+    ]
+    return [point(back, b0), point(front, f0), point(front, f1), point(back, b1)]
+  }
   const M4 = [
-    [ux, nx, 0, p0[0]],
-    [uy, ny, 0, p0[1]],
+    [u[0], n[0], 0, p0[0]],
+    [u[1], n[1], 0, p0[1]],
     [0, 0, 1, 0],
     [0, 0, 0, 1],
   ]
+  const carPoly = poly(TOE, depth - 0.021)
+  const car = cut
+    ? mlib.join([
+        mlib.prism(carPoly, TOE, cut.z0),
+        mlib.aperturedPrism(carPoly, cut.poly, cut.z0, CTR_H - TOP_T),
+      ])
+    : mlib.prism(carPoly, TOE, CTR_H - TOP_T)
+  w.add(car, M.turq)
+  w.add(mlib.prism(poly(TOE + 0.055, depth - 0.03), 0, TOE), M.turq2)
+
+  // Fronts are divided between the two mitres on their own offset line.
+  const [d0, d1] = span(depth - 0.019)
+  const doorLen = d1 - d0
   const placed: [MeshData, THREE.Material][] = []
-  const car = mlib.box(0.0, TOE, TOE, ln, depth - 0.021, CTR_H - TOP_T)
-  placed.push([car, M.turq])
-  const kick = mlib.box(0.0, TOE + 0.055, 0.0, ln, depth - 0.03, TOE)
-  placed.push([kick, M.turq2])
-  // fronts
   const z0 = TOE
   const fh = CTR_H - TOP_T - TOE
   const rows: [string, number][] = []
@@ -142,10 +196,10 @@ function baseRun(
   rows.push(['dr_or_door', fh - drawers * drH])
   let zz = z0
   for (const [kind, hh] of rows) {
-    const n = kind !== 'dr' ? doors : 1
-    for (let i = 0; i < n; i++) {
-      const dw = (ln - 0.012 * (n + 1)) / n
-      const cx = 0.006 + i * (dw + 0.012) + dw / 2
+    const count = kind !== 'dr' ? doors : 1
+    for (let i = 0; i < count; i++) {
+      const dw = (doorLen - 0.012 * (count + 1)) / count
+      const cx = d0 + 0.006 + i * (dw + 0.012) + dw / 2
       const d = slabDoor(dw, hh - 0.01, 0.019, kind !== 'dr' ? 0.055 : 0.038)
       mlib.translate(d, [cx, depth - 0.019, zz + 0.005])
       placed.push([d, M.turq])
@@ -166,15 +220,16 @@ function baseRun(
     w.add(ob, mm)
   }
   if (top) {
-    const tp = mlib.box(-0.002, -0.012, CTR_H - TOP_T, ln + 0.002, depth + 0.022, CTR_H)
-    mlib.bevel(tp, 0.005, 3)
-    mlib.transform4(tp, M4)
-    mlib.recalcNormals(tp)
+    const topPoly = poly(-0.012, depth + 0.022, 0.002)
+    const tp = cut
+      ? mlib.aperturedPrism(topPoly, cut.poly, CTR_H - TOP_T, CTR_H, 0.005, 3)
+      : mlib.prism(topPoly, CTR_H - TOP_T, CTR_H)
+    if (!cut) mlib.bevel(tp, 0.005, 3)
     w.add(tp, topMat ?? M.block)
   }
   // counter footprint collider
-  const c0: Vec2 = [p0[0] + (nx * depth) / 2 + (ux * ln) / 2, p0[1] + (ny * depth) / 2 + (uy * ln) / 2]
-  w.obb(c0[0], c0[1], ln / 2, depth / 2, Math.atan2(uy, ux))
+  const c0: Vec2 = [p0[0] + (n[0] * depth) / 2 + (u[0] * len) / 2, p0[1] + (n[1] * depth) / 2 + (u[1] * len) / 2]
+  w.obb(c0[0], c0[1], len / 2, depth / 2, Math.atan2(u[1], u[0]))
 }
 
 // --------------------------------------------------------------- open shelving
@@ -526,20 +581,42 @@ function towel(seed = 0, w = 0.235, drop = 0.345, back = 0.215, r = 0.014): Mesh
 }
 
 // ----------------------------------------------------------------------- sink
+function sinkLayout(): { center: Vec2; angle: number; opening: Vec2[] } {
+  const { dir, len } = L.chamferDir()
+  const angle = Math.atan2(dir[1], dir[0])
+  const center = L.chamferPt(len * 0.5, CTR_D * 0.52)
+  const hx = SINK_BOWL_OFFSET + SINK_HX
+  const ca = Math.cos(angle)
+  const sa = Math.sin(angle)
+  const worldPoint = (x: number, y: number): Vec2 => [
+    center[0] + ca * x - sa * y,
+    center[1] + sa * x + ca * y,
+  ]
+  return {
+    center,
+    angle,
+    // Corresponds corner-for-corner with the base-run polygon: start/back,
+    // start/front, end/front, end/back.
+    opening: [
+      worldPoint(-hx, SINK_HY),
+      worldPoint(-hx, -SINK_HY),
+      worldPoint(hx, -SINK_HY),
+      worldPoint(hx, SINK_HY),
+    ],
+  }
+}
+
 function doubleSink(w: World, M: MatSet): void {
-  const { dir, len: cl } = L.chamferDir()
-  const [dxc, dyc] = dir
-  const cen = L.chamferPt(cl * 0.5, CTR_D * 0.52)
+  const { len: cl } = L.chamferDir()
+  const { center: cen, angle: ang } = sinkLayout()
   const parts: MeshData[] = []
-  const HX = 0.1725
-  const HY = 0.1875
   const GAP = 0.0155
   const rim: [number, number, number, number][] = [
-    [-0.39, -0.22, 0.39, -HY],
-    [-0.39, HY, 0.39, 0.22],
-    [-0.39, -HY, -0.188 - HX, HY],
-    [0.188 + HX, -HY, 0.39, HY],
-    [-GAP, -HY, GAP, HY],
+    [-0.39, -0.22, 0.39, -SINK_HY],
+    [-0.39, SINK_HY, 0.39, 0.22],
+    [-0.39, -SINK_HY, -SINK_BOWL_OFFSET - SINK_HX, SINK_HY],
+    [SINK_BOWL_OFFSET + SINK_HX, -SINK_HY, 0.39, SINK_HY],
+    [-GAP, -SINK_HY, GAP, SINK_HY],
   ]
   for (const a of rim) {
     const o = mlib.box(a[0], a[1], CTR_H - 0.004, a[2], a[3], CTR_H + 0.004)
@@ -554,14 +631,13 @@ function doubleSink(w: World, M: MatSet): void {
       [-0.14, 0.955],
       [-0.175, 0.9],
     ]
-    const rings: Vec3[][] = lv.map(([dz, s]) => r.map(([x, y]) => [x * s + sx * 0.188, y * s, CTR_H + dz] as Vec3))
-    rings.push(r.map(([x, y]) => [x * 0.86 + sx * 0.188, y * 0.86, CTR_H - 0.178] as Vec3))
+    const rings: Vec3[][] = lv.map(([dz, s]) => r.map(([x, y]) => [x * s + sx * SINK_BOWL_OFFSET, y * s, CTR_H + dz] as Vec3))
+    rings.push(r.map(([x, y]) => [x * 0.86 + sx * SINK_BOWL_OFFSET, y * 0.86, CTR_H - 0.178] as Vec3))
     const bw = mlib.loft(rings, { closeV: true, capEnd: true })
     parts.push(bw)
   }
   const ob = mlib.join(parts)
   mlib.smoothShade(ob, 32)
-  const ang = Math.atan2(dyc, dxc)
   mlib.rotateZ(ob, ang)
   mlib.translate(ob, [cen[0], cen[1], 0.0])
   w.add(ob, M.sink)
@@ -1087,9 +1163,23 @@ export function build(w: World): MatSet {
   const { len: cl } = L.chamferDir()
 
   // --- base runs -----------------------------------------------------------
-  baseRun(w, [0.0, L.KIT_CTR[0]], [0.0, L.KIT_CTR[1]], M, 1, 1, 0.17)
-  baseRun(w, L.chamferPt(0.0), L.chamferPt(cl), M, 2)
-  baseRun(w, [L.N_BRICK[0], L.NY], [L.FRIDGE_X[0] - 0.02, L.NY], M, 2, 1, 0.17, CTR_D, true, M.block_n)
+  const westRun: Run = [[0, L.KIT_CTR[0]], [0, L.KIT_CTR[1]]]
+  const chamferRun: Run = [L.chamferPt(0), L.chamferPt(cl)]
+  const northRun: Run = [[L.N_BRICK[0], L.NY], [L.FRIDGE_X[0] - 0.02, L.NY]]
+  const sink = sinkLayout()
+  baseRun(w, westRun, M, { doors: 1, drawers: 1, drH: 0.17, mitre: [null, chamferRun] })
+  baseRun(w, chamferRun, M, {
+    doors: 2,
+    mitre: [westRun, northRun],
+    cut: { poly: sink.opening, z0: CTR_H - 0.3 },
+  })
+  baseRun(w, northRun, M, {
+    doors: 2,
+    drawers: 1,
+    drH: 0.17,
+    topMat: M.block_n,
+    mitre: [chamferRun, null],
+  })
   peninsula(w, M)
   proRange(w, M)
   doubleSink(w, M)
@@ -1159,10 +1249,17 @@ function dress(w: World, M: MatSet): void {
   penZ.forEach((zz, i) => {
     P.fillShelf(w, [0.05, L.KIT_PEN[0] + 0.05], [0.05, L.KIT_PEN[1] - 0.05], zz, 0.3, 40 + i, 0.2, 1.0, pool, 0.5)
   })
-  // counter dressing on the north run
-  P.fillShelf(w, [L.N_BRICK[0] + 0.1, L.NY - 0.001], [L.FRIDGE_X[0] - 0.14, L.NY - 0.001], L.CTR_H, 0.62, 9, 0.3, 1.0, pool, 0.34)
-  // counter dressing on the west run
-  P.fillShelf(w, [0.001, L.KIT_CTR[0] + 0.08], [0.001, L.KIT_CTR[1] - 0.06], L.CTR_H, 0.62, 13, 0.3, 1.0, pool, 0.34)
+  // Keep loose crockery in the only clear north-run stretch, beside the fridge.
+  P.fillShelf(w, [2.11, L.NY - 0.001], [2.27, L.NY - 0.001], L.CTR_H, 0.62, 9, 0.26, 1.0, pool, 0.34)
+  // Stop the west-run scatter before the knife block at the chamfer mitre.
+  const counterware = P.fillShelf(w, [0.001, L.KIT_CTR[0] + 0.08], [0.001, 3.34], L.CTR_H, 0.62, 13, 0.3, 1.0, pool, 0.34)
+  // The deterministic scatter leaves one purple stem glass beside the sink;
+  // mirror the Blender post-pass that removes it from the worktop.
+  for (const item of counterware) {
+    const ys = item.md.verts.map((v) => v[1])
+    const centerY = (Math.min(...ys) + Math.max(...ys)) * 0.5
+    if (centerY > 2.44 && centerY < 2.53) w.remove(item.md, item.mat)
+  }
   // yellow floral swag + tails over the kitchen window
   const chintz = mats.floralChintz('chintz_yellow', {
     ground: 'DCA412',

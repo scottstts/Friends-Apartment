@@ -220,7 +220,8 @@ const ITEMS: [string, number][] = [
   ['stem', 0.09],
 ]
 
-/** Scatter believable crockery along a shelf running p0->p1 at height z. */
+/** Scatter believable crockery along a shelf running p0->p1 at height z.
+ * `skip` reserves run-relative spans already occupied by standing appliances. */
 export function fillShelf(
   w: World,
   p0: Vec2,
@@ -233,7 +234,8 @@ export function fillShelf(
   matsPool?: THREE.Material[],
   back = 0.55,
   fill = 1.0,
-): void {
+  skip: [number, number][] = [],
+): Placed[] {
   const rng = new PyRandom(seed)
   const pool = matsPool ?? palette(seed)
   const gl = [
@@ -255,7 +257,14 @@ export function fillShelf(
   let u = rng.uniform(0.02, 0.06) + (ln - span) * rng.random()
   const stop = u + span
   let grp = rng.randint(3, 6)
+  const out: Placed[] = []
   while (u < Math.min(stop, ln - 0.05)) {
+    const blockedEnds = skip.filter(([s0, s1]) => u + 0.13 > s0 && u < s1).map(([, s1]) => s1)
+    if (blockedEnds.length > 0) {
+      u = Math.max(...blockedEnds) + 0.03
+      grp = rng.randint(3, 6)
+      continue
+    }
     const kind = rng.choicesWeighted(
       ITEMS.map(([k]) => k),
       ITEMS.map(([, wt]) => wt),
@@ -266,7 +275,7 @@ export function fillShelf(
     } else if (['bowl', 'jar'].includes(kind) && rng.random() < 0.16) {
       m = rng.choice(brass)
     }
-    const v = depth * back + rng.uniform(-0.03, 0.03)
+    let v = depth * back + rng.uniform(-0.03, 0.03)
     let objs: Placed[]
     let wid: number
     if (kind === 'jar') {
@@ -299,7 +308,7 @@ export function fillShelf(
     } else if (kind === 'carton') {
       const cw = rng.uniform(0.055, 0.095)
       objs = carton(cw, rng.uniform(0.04, 0.07), Math.min(maxh, rng.uniform(0.1, 0.19)), m, rng.random() < 0.75 ? rng.choice(pool) : null)
-      wid = cw
+      wid = cw + 0.022
     } else if (kind === 'stem') {
       const r = rng.uniform(0.03, 0.04)
       objs = stemware(r, Math.min(maxh, rng.uniform(0.13, 0.175)), m)
@@ -307,15 +316,23 @@ export function fillShelf(
     } else {
       const bw = rng.uniform(0.12, 0.19)
       objs = book(bw, rng.uniform(0.026, 0.05), Math.min(maxh, rng.uniform(0.17, 0.225)), m)
-      wid = rng.uniform(0.026, 0.05)
+      rng.uniform(0.026, 0.05) // preserve the original RNG draw order
+      wid = bw + 0.022
     }
     u += wid * 0.5
+    if (u + wid * 0.5 > ln - 0.008) break
+    if (depth > wid + 0.012) {
+      v = Math.min(Math.max(v, wid * 0.5 + 0.006), depth - wid * 0.5 - 0.006)
+    } else {
+      v = depth * 0.5
+    }
     const ang = rng.uniform(-0.5, 0.5)
     for (const o of objs) {
       if (kind === 'carton' || kind === 'book') {
         mlib.rotateZ(o.md, Math.atan2(uy, ux) + ang)
       }
       mlib.translate(o.md, [p0[0] + ux * u + nx * v, p0[1] + uy * u + ny * v, z])
+      out.push(o)
       w.add(o.md, o.mat)
     }
     grp -= 1
@@ -326,6 +343,7 @@ export function fillShelf(
       u += wid * 0.5 + rng.uniform(0.001, 0.01) / density
     }
   }
+  return out
 }
 
 // ---------------------------------------------------------------------- plants

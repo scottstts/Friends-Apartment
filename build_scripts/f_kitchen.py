@@ -102,27 +102,72 @@ def bar_pull(name, ln=0.135, cname=C, mat=None):
     return ob
 
 
-def base_run(name, p0, p1, M, doors=2, drawers=0, dr_h=0.16, depth=CTR_D,
-             top=True, top_mat=None, cname=C):
-    """Base cabinet run along p0->p1 (interior side is to the RIGHT of travel,
-    i.e. carcass grows away from the wall)."""
+def _isect(p, d, q, e):
+    """Where the line p + t*d crosses the line q + s*e."""
+    den = d[0] * e[1] - d[1] * e[0]
+    t = ((q[0] - p[0]) * e[1] - (q[1] - p[1]) * e[0]) / den
+    return (p[0] + d[0] * t, p[1] + d[1] * t)
+
+
+def _run_frame(p0, p1):
+    """(unit along the run, unit into the room) for a base run."""
     dx, dy = p1[0] - p0[0], p1[1] - p0[1]
     ln = math.hypot(dx, dy)
-    ux, uy = dx / ln, dy / ln
-    nx, ny = uy, -ux                      # into the room
-    parts = []
-    # carcass (front face held back 21 mm so the doors never sit coplanar)
-    car = mlib.box(name + "_car", 0.0, TOE, TOE, ln, depth - 0.021,
-                   CTR_H - TOP_T, cname)
-    parts.append((car, M['turq']))
-    kick = mlib.box(name + "_kick", 0.0, TOE + 0.055, 0.0, ln, depth - 0.030,
-                    TOE, cname)
-    parts.append((kick, M['turq2']))
+    u = (dx / ln, dy / ln)
+    return u, (u[1], -u[0]), ln
+
+
+def base_run(name, p0, p1, M, doors=2, drawers=0, dr_h=0.16, depth=CTR_D,
+             top=True, top_mat=None, mitre=(None, None), cname=C):
+    """Base cabinet run along p0->p1 (interior side is to the RIGHT of travel,
+    i.e. carcass grows away from the wall).
+
+    `mitre` gives the (p0, p1) of the runs joining this one at each end, or
+    None for a free end.  Every horizontal layer - kick, carcass, worktop, door
+    line - is then closed where its own offset line crosses the neighbour's
+    line at the same offset, which is the only way two runs meeting at an angle
+    can share a corner.  They used to be plain boxes run to full length, so at
+    both turns of this kitchen the three slabs drove straight through each
+    other: the chamfer's worktop put a triangular flap out through the west
+    run's front edge, and its left-hand door started 190 mm inside the west
+    carcass.
+    """
+    u, n, ln = _run_frame(p0, p1)
+
+    def span(off, pad=0.0):
+        """(t0, t1) along the run of the line held `off` in from the wall."""
+        a = (p0[0] + n[0] * off, p0[1] + n[1] * off)
+        out = []
+        for k, nb in enumerate(mitre):
+            if nb is None:
+                out.append(-pad if k == 0 else ln + pad)
+                continue
+            v, m, _ = _run_frame(*nb)
+            q = (nb[0][0] + m[0] * off, nb[0][1] + m[1] * off)
+            P = _isect(a, u, q, v)
+            out.append((P[0] - a[0]) * u[0] + (P[1] - a[1]) * u[1])
+        return out
+
+    def poly(back, front, pad=0.0):
+        b0, b1 = span(back, pad)
+        f0, f1 = span(front, pad)
+        pt = lambda o, t: (p0[0] + n[0] * o + u[0] * t,
+                           p0[1] + n[1] * o + u[1] * t)
+        return [pt(back, b0), pt(front, f0), pt(front, f1), pt(back, b1)]
+
     objs = []
-    for ob, mm in parts:
-        mlib.set_mat(ob, mm)
-        objs.append(ob)
-    # fronts
+    # carcass (front face held back 21 mm so the doors never sit coplanar)
+    car = mlib.prism(name + "_car", poly(TOE, depth - 0.021), TOE,
+                     CTR_H - TOP_T, cname)
+    mlib.set_mat(car, M['turq'])
+    objs.append(car)
+    kick = mlib.prism(name + "_kick", poly(TOE + 0.055, depth - 0.030), 0.0,
+                      TOE, cname)
+    mlib.set_mat(kick, M['turq2'])
+    objs.append(kick)
+    # fronts - laid out between the mitres on the door line, not 0..ln
+    d0, d1 = span(depth - 0.019)
+    dln = d1 - d0
     z0 = TOE
     fh = CTR_H - TOP_T - TOE
     rows = []
@@ -133,10 +178,10 @@ def base_run(name, p0, p1, M, doors=2, drawers=0, dr_h=0.16, depth=CTR_D,
     zz = z0
     fronts = []
     for kind, hh in rows:
-        n = doors if kind != 'dr' else 1
-        for i in range(n):
-            w = (ln - 0.012 * (n + 1)) / n
-            cx = 0.006 + i * (w + 0.012) + w / 2
+        cnt = doors if kind != 'dr' else 1
+        for i in range(cnt):
+            w = (dln - 0.012 * (cnt + 1)) / cnt
+            cx = d0 + 0.006 + i * (w + 0.012) + w / 2
             d = slab_door(name + "_d", w, hh - 0.010, 0.019, cname, M['turq'],
                           rail=0.055 if kind != 'dr' else 0.038)
             mlib.translate(d, (cx, depth - 0.019, zz + 0.005))
@@ -151,22 +196,19 @@ def base_run(name, p0, p1, M, doors=2, drawers=0, dr_h=0.16, depth=CTR_D,
                                     zz + hh - 0.14))
             fronts.append(pl)
         zz += hh
-    # place everything: local x along the run, local y into the room, from the wall
-    grp = objs + fronts
-    for ob in grp:
-        M4 = Matrix(((ux, nx, 0.0, p0[0]), (uy, ny, 0.0, p0[1]),
+    # fronts are built in local x-along/y-into coords, so they still need the map
+    for ob in fronts:
+        M4 = Matrix(((u[0], n[0], 0.0, p0[0]), (u[1], n[1], 0.0, p0[1]),
                      (0.0, 0.0, 1.0, 0.0), (0.0, 0.0, 0.0, 1.0)))
         ob.data.transform(M4)
         mlib.recalc_normals(ob)
+    grp = objs + fronts
     if top:
-        tp = mlib.box(name + "_top", -0.002, -0.012, CTR_H - TOP_T, ln + 0.002,
-                      depth + 0.022, CTR_H, cname)
-        M4 = Matrix(((ux, nx, 0.0, p0[0]), (uy, ny, 0.0, p0[1]),
-                     (0.0, 0.0, 1.0, 0.0), (0.0, 0.0, 0.0, 1.0)))
-        tp.data.transform(M4)
-        mlib.recalc_normals(tp)
+        tp = mlib.prism(name + "_top", poly(-0.012, depth + 0.022, pad=0.002),
+                        CTR_H - TOP_T, CTR_H, cname)
         mlib.bevel(tp, 0.005, 3, 45)
         mlib.set_mat(tp, top_mat or M['block'])
+        grp.append(tp)
     return grp
 
 
@@ -474,7 +516,7 @@ def towel(name, cname=C, w=0.235, drop=0.345, back=0.215, r=0.014, seed=0):
 
 
 # ----------------------------------------------------------------------- sink
-def double_sink(name, M, cname=C):
+def double_sink(name, M, cname=C, cut=()):
     (dxc, dyc), cl = L.chamfer_dir()
     inw = (dyc, -dxc)
     cen = L.chamfer_pt(cl * 0.5, CTR_D * 0.52)
@@ -514,6 +556,22 @@ def double_sink(name, M, cname=C):
     ang = math.atan2(dyc, dxc)
     mlib.rotate_z(ob, ang)
     mlib.translate(ob, (cen[0], cen[1], 0.0))
+    # Now actually let go of the worktop.  Making the rim a frame was only half
+    # of it: the butcher block underneath was still a solid slab straight across
+    # the run, so both bowls were lidded by wood and the sink read as a steel
+    # tray laid on top of the counter.  Cut the tap hole for real - down through
+    # the block and on through the carcass below it, or the cabinet's top face
+    # would sit at 0.873 and close the bowls off again 136 mm down.  The opening
+    # is the rim's own inner edge, so the 29 mm lip covers the sawn edge.
+    for tgt in cut:
+        o = bpy.data.objects.get(tgt)
+        if o is None:
+            continue
+        cutter = mlib.box(name + "_cut", -0.188 - HX, -HY, CTR_H - 0.30,
+                          0.188 + HX, HY, CTR_H + 0.05, cname)
+        mlib.rotate_z(cutter, ang)
+        mlib.translate(cutter, (cen[0], cen[1], 0.0))
+        mlib.boolean(o, cutter)
     # gooseneck faucet
     prof = [(0.0, 0.0), (0.030, 0.0), (0.030, 0.030), (0.020, 0.045),
             (0.019, 0.150)]
@@ -949,16 +1007,19 @@ def build():
     (dxc, dyc), cl = L.chamfer_dir()
 
     # --- base runs -----------------------------------------------------------
-    base_run("K_base_w", (0.0, L.KIT_CTR[0]), (0.0, L.KIT_CTR[1]), M,
-             doors=1, drawers=1, dr_h=0.17)
-    # chamfer run (sink)
-    base_run("K_base_ch", L.chamfer_pt(0.0), L.chamfer_pt(cl), M, doors=2)
-    # north run
-    base_run("K_base_n", (L.N_BRICK[0], L.NY), (L.FRIDGE_X[0] - 0.02, L.NY), M,
-             doors=2, drawers=1, dr_h=0.17, top_mat=M['block_n'])
+    # One chain, west -> chamfer -> north, so each pair mitres on its corner
+    # instead of the three runs interpenetrating.
+    RW = ((0.0, L.KIT_CTR[0]), (0.0, L.KIT_CTR[1]))
+    RC = (L.chamfer_pt(0.0), L.chamfer_pt(cl))
+    RN = ((L.N_BRICK[0], L.NY), (L.FRIDGE_X[0] - 0.02, L.NY))
+    base_run("K_base_w", *RW, M=M, doors=1, drawers=1, dr_h=0.17,
+             mitre=(None, RC))
+    base_run("K_base_ch", *RC, M=M, doors=2, mitre=(RW, RN))     # sink run
+    base_run("K_base_n", *RN, M=M, doors=2, drawers=1, dr_h=0.17,
+             top_mat=M['block_n'], mitre=(RC, None))
     peninsula("K_peninsula", M)
     pro_range("K_range", M)
-    double_sink("K_sink", M)
+    double_sink("K_sink", M, cut=("K_base_ch_top", "K_base_ch_car"))
     fridge("K_fridge", M)
 
     # --- upper shelving ------------------------------------------------------
@@ -1027,14 +1088,26 @@ def dress(M):
         P.fill_shelf("K_pf%d" % i, (0.05, L.KIT_PEN[0] + 0.05),
                      (0.05, L.KIT_PEN[1] - 0.05), zz, 0.30, seed=40 + i,
                      cname=C, maxh=0.20, mats_pool=pool, back=0.5)
-    # counter dressing on the north run
-    P.fill_shelf("K_cn", (L.N_BRICK[0] + 0.10, L.NY - 0.001),
-                 (L.FRIDGE_X[0] - 0.14, L.NY - 0.001), CTR_H, 0.62, seed=9,
-                 cname=C, maxh=0.30, mats_pool=pool, back=0.34)
-    # counter dressing on the west run
-    P.fill_shelf("K_cw", (0.001, L.KIT_CTR[0] + 0.08),
-                 (0.001, L.KIT_CTR[1] - 0.06), CTR_H, 0.62, seed=13,
-                 cname=C, maxh=0.30, mats_pool=pool, back=0.34)
+    # Counter dressing on the north run, in the one stretch the appliances do
+    # not have: the corner by the fridge.  It used to be scattered along the
+    # whole 1.10 m from x=1.12, which is the same stretch the coffee maker, the
+    # mixer and the toaster stand on, so a bowl was sharing its space with the
+    # coffee maker and a jar with the toaster.
+    P.fill_shelf("K_cn", (2.11, L.NY - 0.001), (2.27, L.NY - 0.001),
+                 CTR_H, 0.62, seed=9, cname=C, maxh=0.26, mats_pool=pool,
+                 back=0.34)
+    # counter dressing on the west run - stopped short of the knife block,
+    # which now stands on the chamfer just past the mitre
+    cw = P.fill_shelf("K_cw", (0.001, L.KIT_CTR[0] + 0.08), (0.001, 3.34),
+                      CTR_H, 0.62, seed=13, cname=C, maxh=0.30, mats_pool=pool,
+                      back=0.34)
+    # the purple goblet the scatter left standing on the worktop next to the
+    # sink - a stem glass belongs in a cupboard, not out on the block
+    for ob in list(cw):
+        ys = [v.co.y for v in ob.data.vertices]
+        if 2.44 < (min(ys) + max(ys)) * 0.5 < 2.53:
+            cw.remove(ob)
+            bpy.data.objects.remove(ob, do_unlink=True)
     # yellow floral swag + tails over the kitchen window
     chintz = mats.floral_chintz('chintz_yellow', ground='DCA412', petal='B81C55',
                                 petal2='DE6389', leaf='1E4E33', leaf2='5F8C44',

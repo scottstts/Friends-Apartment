@@ -5,6 +5,7 @@
  */
 import type * as THREE from 'three/webgpu'
 import * as L from '../lib/L'
+import type { Vec2 } from '../lib/mesh'
 import * as mlib from '../lib/mlib'
 import * as mats from '../mats/mats'
 import * as W from './walls'
@@ -12,6 +13,37 @@ import { buildParquet } from './floor'
 import type { World } from './world'
 
 export type MatSet = Record<string, THREE.Material>
+
+function pointInPoly(x: number, y: number, poly: Vec2[]): boolean {
+  let inside = false
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i]
+    const [xj, yj] = poly[j]
+    const ex = xi - xj
+    const ey = yi - yj
+    const px = x - xj
+    const py = y - yj
+    if (Math.abs(ex * py - ey * px) < 1e-9 && px * ex + py * ey >= 0 && px * ex + py * ey <= ex * ex + ey * ey) return true
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside
+  }
+  return inside
+}
+
+function rect(x0: number, y0: number, x1: number, y1: number): Vec2[] {
+  return [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]
+}
+
+/** Plan footprint of W.wall(): the inner face is p0->p1 and thickness grows
+ * to the left of travel. This lets the parquet trim retain boards under walls
+ * exactly as the Blender shell ray test does. */
+function wallFootprint(p0: Vec2, p1: Vec2, thickness: number): Vec2[] {
+  const dx = p1[0] - p0[0]
+  const dy = p1[1] - p0[1]
+  const ln = Math.hypot(dx, dy)
+  const nx = -dy / ln
+  const ny = dx / ln
+  return [p0, p1, [p1[0] + nx * thickness, p1[1] + ny * thickness], [p0[0] + nx * thickness, p0[1] + ny * thickness]]
+}
 
 export function buildMats(): MatSet {
   const M: MatSet = {}
@@ -67,15 +99,51 @@ export function build(w: World): MatSet {
   const TW = L.TW
   const TP = L.TP
 
+  const mainPoly: Vec2[] = [
+    [0, L.SY],
+    [0, L.CH_A[1]],
+    L.CH_B,
+    [L.N_BRICK[1], L.NY],
+    [L.HALL_WW[0], L.HALL_Y0],
+    [L.HALL_X[0], L.HALL_Y0],
+    [L.HALL_X[0], L.NW_Y],
+    [L.HALL_X[1], L.NW_Y],
+    [L.HALL_X[1], L.AL_S],
+    [L.EX, L.AL_S],
+    [L.EX, L.SY],
+  ]
+  const floorCover: Vec2[][] = [
+    mainPoly,
+    rect(L.BA_X[0], L.BA_Y[0], L.BA_X[1], L.BA_Y[1]),
+    rect(L.AL_X[0], L.AL_S, L.AL_X[1], L.NYW),
+    rect(L.BED_X[0], L.RB_Y[0], L.BED_X[1], L.RB_Y[1]),
+    rect(L.BED_X[0], L.MB_Y[0], L.BED_X[1], L.MB_Y[1]),
+    wallFootprint([0, L.SY], [0, L.CH_A[1]], TW),
+    wallFootprint(L.CH_A, L.CH_B, TW),
+    wallFootprint([L.N_BRICK[0], L.NY], [L.N_BRICK[1], L.NY], TP),
+    wallFootprint([L.HALL_X[0], L.HALL_Y0], [L.HALL_X[0], L.NW_Y], L.HALL_X[0] - L.HALL_WW[0]),
+    wallFootprint([L.HALL_X[0], L.NW_Y], [L.HALL_X[1], L.NW_Y], 0.3),
+    wallFootprint([L.HALL_X[1], L.NW_Y], [L.HALL_X[1], L.NYW], L.HALL_EW[1] - L.HALL_EW[0]),
+    wallFootprint([L.HALL_EW[1], L.NYW], [L.AL_X[1], L.NYW], TW),
+    wallFootprint([L.EX, L.NYW], [L.EX, L.SY], L.EXW - L.EX),
+    wallFootprint([L.EXT_E, L.SY], [0, L.SY], TW),
+    wallFootprint([L.BA_X[0], L.BA_Y[1]], [L.BA_X[1], L.BA_Y[1]], TW),
+    wallFootprint([L.BA_X[0], L.BA_Y[0]], [L.BA_X[0], L.BA_Y[1]], TW),
+    wallFootprint([L.BED_X[0], L.BED_DIV[0]], [L.BED_X[1], L.BED_DIV[0]], L.BED_DIV[1] - L.BED_DIV[0]),
+    wallFootprint([L.EXT_E, L.NYW], [L.EXT_E, L.SY], TW),
+    wallFootprint([L.BED_X[0], L.NYW], [L.BED_X[1], L.NYW], TW),
+  ]
+  const floorCovered = (x: number, y: number): boolean => floorCover.some((poly) => pointInPoly(x, y, poly))
+
   // ---------------------------------------------------------------- floor
   // Keep every opaque architectural surface in the caster set. Even though
   // the parquet is the lowest visible surface, raised seams and thresholds
   // still contribute to local occlusion in the reference.
   const subMat = mats.paint('subfloor_dark', '2A1F16', { rough: 0.8 })
-  const sub = mlib.box(-0.6, L.SY - 0.6, -0.02, 12.4, 7.1, 0.0035)
+  const sub = mlib.box(-0.32, L.SY - 0.32, -0.02, 11.95, 7.15, 0.0035)
   w.add(sub, subMat)
   // 0.52 m module: the set's parquet reads big
-  const par = buildParquet(-0.45, L.SY - 0.45, 12.3, L.NW_Y + 0.55, 0.52)
+  const par = buildParquet(-0.45, L.SY - 0.45, 12.3, L.NW_Y + 0.55, 0.52, 0.0014, 0.0095, Math.PI / 4, floorCovered)
   w.add(par, M.parquet)
 
   // ---------------------------------------------------------------- walls
@@ -223,19 +291,6 @@ export function build(w: World): MatSet {
   }
 
   // ------------------------------------------------------------- ceilings
-  const mainPoly: [number, number][] = [
-    [0, L.SY],
-    [0, L.CH_A[1]],
-    L.CH_B,
-    [L.N_BRICK[1], L.NY],
-    [L.HALL_WW[0], L.HALL_Y0],
-    [L.HALL_X[0], L.HALL_Y0],
-    [L.HALL_X[0], L.NW_Y],
-    [L.HALL_X[1], L.NW_Y],
-    [L.HALL_X[1], L.AL_S],
-    [L.EX, L.AL_S],
-    [L.EX, L.SY],
-  ]
   w.add(mlib.prism(mainPoly, CZ, CZ + 0.1), M.ceil)
   w.add(mlib.box(L.AL_X[0], L.AL_S, L.AL_Z, L.AL_X[1], L.NYW, L.AL_Z + 0.1), M.ceil)
 
@@ -393,14 +448,20 @@ export function build(w: World): MatSet {
   // ------------------------------------------ kitchen tile splash + sills
   w.add(mlib.box(0.0015, L.W_BRICK[0], 0.86, 0.0135, L.CH_A[1], 1.52), M.tile)
   w.add(mlib.box(L.N_BRICK[0], L.NY - 0.0135, 0.86, L.FRIDGE_X[0], L.NY - 0.0015, 1.52), M.tile)
-  w.add(
-    mlib.prism(
-      [L.chamferPt(0.02, 0.0015), L.chamferPt(1.4, 0.0015), L.chamferPt(1.4, 0.0135), L.chamferPt(0.02, 0.0135)],
-      0.86,
-      1.52,
-    ),
-    M.tile,
-  )
+  for (const [u0, u1, z0, z1] of [
+    [0.02, 1.4, 0.86, L.KW_Z[0]],
+    [0.02, L.KW_U[0] + 0.004, L.KW_Z[0], 1.52],
+    [L.KW_U[1] - 0.004, 1.4, L.KW_Z[0], 1.52],
+  ] as [number, number, number, number][]) {
+    w.add(
+      mlib.prism(
+        [L.chamferPt(u0, 0.0015), L.chamferPt(u1, 0.0015), L.chamferPt(u1, 0.0135), L.chamferPt(u0, 0.0135)],
+        z0,
+        z1,
+      ),
+      M.tile,
+    )
+  }
 
   // ------------------------------------------------------ wall colliders
   w.wallCollider([0, L.SY], [0, 3.62], TW) // west (front door stays closed)

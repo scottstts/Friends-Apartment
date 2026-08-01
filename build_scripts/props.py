@@ -183,7 +183,7 @@ ITEMS = [
 
 
 def fill_shelf(name, p0, p1, z, depth, seed=0, cname="Details", maxh=0.20,
-               density=1.0, mats_pool=None, back=0.55, fill=1.0):
+               density=1.0, mats_pool=None, back=0.55, fill=1.0, skip=()):
     """Scatter believable crockery along a shelf running p0->p1 at height z.
 
     `fill` is how much of the run gets used, 0..1.  Nobody loads a shelf evenly:
@@ -192,7 +192,14 @@ def fill_shelf(name, p0, p1, z, depth, seed=0, cname="Details", maxh=0.20,
     one density everywhere is what makes procedural shelves read as wallpaper.
 
     Items come in clusters with real gaps between them, rather than a constant
-    trickle, for the same reason."""
+    trickle, for the same reason.
+
+    `skip` is a list of (u0, u1) stretches of the run that are already spoken
+    for - a coffee maker, a mixer, a dish rack - which the scatter steps over.
+    Without it the counter runs were being filled straight through the standing
+    appliances: a bowl was sharing its space with the blender, a jar with the
+    toaster.  Passing nothing leaves the random walk byte-identical, so every
+    shelf that has no appliances on it is untouched."""
     rng = random.Random(seed)
     pool = mats_pool or palette(seed)
     # a quarter of the vessels are glass: a shelf of nothing but opaque colour
@@ -215,6 +222,14 @@ def fill_shelf(name, p0, p1, z, depth, seed=0, cname="Details", maxh=0.20,
     grp = rng.randint(3, 6)
     out = []
     while u < min(stop, ln - 0.05):
+        # step over anything already standing here.  0.13 is a look-ahead for
+        # the widest thing the scatter can produce, so an item is never started
+        # close enough to a zone that its far side lands inside it.
+        blk = [s1 for (s0, s1) in skip if u + 0.13 > s0 and u < s1]
+        if blk:
+            u = max(blk) + 0.03
+            grp = rng.randint(3, 6)
+            continue
         kind = rng.choices([k for k, _ in ITEMS], [w for _, w in ITEMS])[0]
         m = rng.choice(pool)
         if kind in ('jar', 'bottle', 'cup', 'stem') and rng.random() < 0.30:
@@ -255,18 +270,43 @@ def fill_shelf(name, p0, p1, z, depth, seed=0, cname="Details", maxh=0.20,
             objs = carton(name, w, rng.uniform(0.04, 0.07),
                           min(maxh, rng.uniform(0.10, 0.19)), cname=cname, mat=m,
                           band=rng.choice(pool) if rng.random() < 0.75 else None)
-            wid = w
+            # a carton is the one item the walk turns on its own axis, by up to
+            # half a radian, which swings its corners further along the shelf
+            # than its width - and its label band is a further 0.8 mm proud on
+            # every face.  Both were unpaid for, so cartons grazed their
+            # neighbours.
+            wid = w + 0.022
         elif kind == 'stem':
             r = rng.uniform(0.030, 0.040)
             objs = stemware(name, r, min(maxh, rng.uniform(0.13, 0.175)),
                             cname=cname, mat=m)
             wid = 2.05 * r
         else:
+            # A book is built w across and t thick, and the walk then turns it
+            # so w lies ALONG the shelf - but it was advancing by a fresh draw
+            # in the thickness range instead, so each book claimed 26-50 mm of
+            # shelf while occupying 120-190 mm of it.  Books simply grew through
+            # whatever stood next to them.
             w = rng.uniform(0.12, 0.19)
             objs = book(name, w, rng.uniform(0.026, 0.05),
                         min(maxh, rng.uniform(0.17, 0.225)), cname=cname, mat=m)
-            wid = rng.uniform(0.026, 0.05)
+            rng.uniform(0.026, 0.05)    # kept: kills the draw, not the sequence
+            wid = w + 0.022
         u += wid * 0.5
+        # Two things the walk never checked.  Along the run, the last item was
+        # placed on its centre with no test that its far side still had shelf
+        # under it - which is how a bowl came to hang 68 mm off the end of the
+        # top cubby and into the window jabot.  Across the run, `v` is jittered
+        # by up to 30 mm with no regard for how wide the item is, so a 172 mm
+        # bowl on a 190 mm shelf could stand 22 mm proud of the front edge.
+        if u + wid * 0.5 > ln - 0.008:
+            for o in objs:
+                bpy.data.objects.remove(o, do_unlink=True)
+            break
+        if depth > wid + 0.012:
+            v = min(max(v, wid * 0.5 + 0.006), depth - wid * 0.5 - 0.006)
+        else:
+            v = depth * 0.5          # wider than the shelf is deep: centre it
         ang = rng.uniform(-0.5, 0.5)
         for o in objs:
             if kind in ('carton', 'book'):
