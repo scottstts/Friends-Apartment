@@ -282,6 +282,183 @@ export function build(w: World): void {
   FL.sconce(w, [L.EXW + 0.02, L.MB_Y[1] - 0.85, 1.8], [1, 0], ML, 16.0, true)
 }
 
+/** One horizontal section through the WC pan. The asymmetric egg plan keeps
+ * the rear blunt and gives the front the long taper of a cast china bowl. */
+function panRing(hw: number, yb: number, yf: number, z: number, n = 44, waist = 0.38): Vec3[] {
+  const cy = yb + (yf - yb) * waist
+  return Array.from({ length: n }, (_, i) => {
+    const a = (Math.PI * 2 * i) / n
+    const c = Math.cos(a)
+    return [hw * Math.sin(a), c >= 0 ? cy + (yf - cy) * c : cy + (cy - yb) * c, z]
+  })
+}
+
+/** Close-coupled two-piece WC, facing local +Y with its tank against the
+ * south wall. Ported section-for-section from the authoritative Blender mesh. */
+function waterCloset(w: World, cx: number, cy: number, wht: THREE.Material, chrome: THREE.Material, wallY: number): void {
+  const rim = 0.395
+  const seatT = 0.019
+  const lidT = 0.026
+  const shelfZ = rim + seatT + lidT + 0.007
+  const tankZ = shelfZ + 0.31
+  const tankLidZ = shelfZ + 0.34
+  const hw = 0.185
+  const yb = -0.118
+  const yf = 0.352
+  const tankY = -0.254
+
+  const pan = mlib.loft(
+    [
+      panRing(0.118, -0.29, 0.15, 0.0),
+      panRing(0.112, -0.288, 0.144, 0.024),
+      panRing(0.09, -0.28, 0.11, 0.13),
+      panRing(0.1, -0.276, 0.138, 0.208),
+      panRing(0.14, -0.24, 0.226, 0.284),
+      panRing(0.174, -0.172, 0.314, 0.356),
+      panRing(hw, yb, yf, rim - 0.014),
+      panRing(hw, yb, yf, rim),
+      panRing(0.152, yb + 0.022, 0.282, rim - 0.004),
+      panRing(0.132, yb + 0.038, 0.252, 0.347),
+      panRing(0.102, yb + 0.064, 0.192, 0.282),
+      panRing(0.064, yb + 0.098, 0.118, 0.228),
+      panRing(0.032, yb + 0.122, 0.062, 0.202),
+    ],
+    { closeV: true, capStart: true, capEnd: true },
+  )
+  mlib.smoothShade(pan, 44)
+
+  const shelf = mlib.loft(
+    [
+      mlib.roundedRect(0.196, 0.204, 0.046, 4).map(([x, y]) => [x, y - 0.25, 0.17] as Vec3),
+      mlib.roundedRect(0.25, 0.212, 0.044, 4).map(([x, y]) => [x, y - 0.246, 0.29] as Vec3),
+      mlib.roundedRect(0.31, 0.19, 0.036, 4).map(([x, y]) => [x, y - 0.257, 0.396] as Vec3),
+      mlib.roundedRect(0.33, 0.176, 0.03, 4).map(([x, y]) => [x, y - 0.264, shelfZ] as Vec3),
+    ],
+    { closeV: true, capStart: true, capEnd: true },
+  )
+  mlib.bevel(shelf, 0.008, 2)
+  mlib.smoothShade(shelf, 46)
+
+  const hingeFlat = mlib.prism(mlib.roundedRect(0.32, 0.09, 0.026, 3), 0.32, rim)
+  mlib.translate(hingeFlat, [0.0, -0.15, 0.0])
+  mlib.bevel(hingeFlat, 0.008, 2)
+
+  const tank = mlib.prism(mlib.roundedRect(0.428, 0.196, 0.026, 4), shelfZ - 0.006, tankZ)
+  mlib.bevel(tank, 0.012, 3)
+  mlib.translate(tank, [0.0, tankY, 0.0])
+  const tankLid = mlib.prism(mlib.roundedRect(0.452, 0.22, 0.03, 4), tankZ, tankLidZ)
+  mlib.bevel(tankLid, 0.009, 3)
+  mlib.translate(tankLid, [0.0, tankY, 0.0])
+
+  const body = mlib.join([pan, shelf, hingeFlat, tank, tankLid])
+  mlib.translate(body, [cx, cy, 0.0])
+  w.add(body, wht, { collide: true })
+
+  const plan = panRing(hw, yb, yf, 0.0).map(([x, y]) => [x, y] as Vec2)
+  const planCy = yb + (yf - yb) * 0.38
+  const ring2d = (scale: number, dy = 0): Vec2[] => plan.map(([x, y]) => [x * scale, planCy + (y - planCy) * scale + dy])
+  const seat = mlib.annularPrism(ring2d(1.008), ring2d(0.66, 0.03), rim, rim + seatT, 0.006, 3)
+  mlib.smoothShade(seat, 40)
+  const closedLid = mlib.loft(
+    [
+      ring2d(1.018).map(([x, y]) => [x, y, rim + seatT] as Vec3),
+      ring2d(1.014).map(([x, y]) => [x, y, rim + seatT + lidT * 0.62] as Vec3),
+      ring2d(0.93).map(([x, y]) => [x, y, rim + seatT + lidT] as Vec3),
+    ],
+    { closeV: true, capStart: true, capEnd: true },
+  )
+  mlib.bevel(closedLid, 0.008, 3)
+  mlib.smoothShade(closedLid, 44)
+  const seatParts = mlib.join([seat, closedLid])
+  mlib.translate(seatParts, [cx, cy, 0.0])
+  w.add(seatParts, wht)
+
+  const tankFront = tankY + 0.098
+  const fittings: MeshData[] = []
+  const escutcheon = mlib.revolve(
+    [
+      [0.0, 0.0],
+      [0.02, 0.0],
+      [0.019, 0.014],
+      [0.01, 0.02],
+      [0.0, 0.02],
+    ],
+    14,
+  )
+  mlib.rotX(escutcheon, -Math.PI / 2)
+  mlib.translate(escutcheon, [-0.128, tankFront - 0.004, tankZ - 0.072])
+  fittings.push(escutcheon)
+  fittings.push(
+    mlib.tubeAlong(
+      [
+        [-0.128, tankFront + 0.016, tankZ - 0.072],
+        [-0.128, tankFront + 0.024, tankZ - 0.074],
+        [-0.052, tankFront + 0.028, tankZ - 0.102],
+      ],
+      mlib.roundedRect(0.022, 0.008, 0.004, 2),
+    ),
+  )
+
+  const wallOffsetY = wallY - cy
+  const stop = mlib.revolve(
+    [
+      [0.0, 0.0],
+      [0.022, 0.0],
+      [0.022, 0.052],
+      [0.03, 0.058],
+      [0.03, 0.07],
+      [0.0, 0.07],
+    ],
+    14,
+  )
+  mlib.rotX(stop, -Math.PI / 2)
+  mlib.translate(stop, [-0.242, wallOffsetY, 0.19])
+  fittings.push(stop)
+  const supplyCurve = mlib.bez(
+    [wallOffsetY + 0.068, 0.19],
+    [wallOffsetY + 0.2, 0.198],
+    [wallOffsetY + 0.16, 0.34],
+    [wallOffsetY + 0.076, shelfZ - 0.024],
+    10,
+  )
+  const supplySteps = supplyCurve.length - 1
+  fittings.push(
+    mlib.tubeAlong(
+      supplyCurve.map(([y, z], i) => [-0.242 + 0.057 * (i / supplySteps), y, z] as Vec3),
+      mlib.circle(0.0095, 10),
+    ),
+  )
+  const nut = mlib.revolve(
+    [
+      [0.0, 0.0],
+      [0.021, 0.0],
+      [0.021, 0.03],
+      [0.0, 0.03],
+    ],
+    12,
+  )
+  mlib.translate(nut, [-0.185, supplyCurve[supplyCurve.length - 1][0], shelfZ - 0.034])
+  fittings.push(nut)
+  for (const sx of [-0.076, 0.076]) {
+    const hinge = mlib.revolve(
+      [
+        [0.0, 0.0],
+        [0.013, 0.0],
+        [0.013, 0.054],
+        [0.0, 0.054],
+      ],
+      12,
+    )
+    mlib.rotY(hinge, Math.PI / 2)
+    mlib.translate(hinge, [sx - 0.027, -0.15, rim + 0.013])
+    fittings.push(hinge)
+  }
+  const fittingMesh = mlib.join(fittings)
+  mlib.smoothShade(fittingMesh, 38)
+  mlib.translate(fittingMesh, [cx, cy, 0.0])
+  w.add(fittingMesh, chrome)
+}
+
 export function dressHall(w: World): void {
   const ML2 = FL.mkMats()
   const gold = mats.get('paint_gilt') ?? mats.paint('paint_gilt', 'C9A24A', { rough: 0.3 })
@@ -463,26 +640,10 @@ export function dressHall(w: World): void {
   mlib.bevel(mc, 0.005, 2)
   w.add(mc, wht)
   w.add(mlib.box(BX - 0.235, L.BA_Y[1] - 0.175, 1.15, BX + 0.235, L.BA_Y[1] - 0.158, 1.63), mats.metal('mirror_glass', 'F0F2F4', { rough: 0.02, bump: 0.0 }))
-  // WC against the south wall, clear of the inward-swinging door.
-  const lo = mlib.revolve(
-    [
-      [0.0, 0.0],
-      [0.16, 0.0],
-      [0.15, 0.1],
-      [0.19, 0.34],
-      [0.22, 0.38],
-      [0.0, 0.4],
-    ],
-    22,
-  )
-  mlib.smoothShade(lo, 36)
-  const WX = L.BA_X[0] + 1.22
-  const WY = L.BA_Y[0] + 0.34
-  mlib.translate(lo, [WX, WY, 0.0])
-  w.add(lo, wht, { collide: true })
-  const cis = mlib.box(WX - 0.2, WY - 0.33, 0.4, WX + 0.2, WY - 0.11, 0.78)
-  mlib.bevel(cis, 0.012, 2)
-  w.add(cis, wht)
+  // Detailed close-coupled WC, tight in the inner corner against the south wall.
+  const WX = L.BA_X[0] + 0.4
+  const WY = L.BA_Y[0] + 0.376
+  waterCloset(w, WX, WY, wht, chrome, L.BA_Y[0])
   // bathroom overhead: a fitting, not a bare lamp
   P.flushDome(w, [(L.BA_X[0] + L.BA_X[1]) * 0.5, (L.BA_Y[0] + L.BA_Y[1]) * 0.5, 2.62], 0.115, 17.0, [1.0, 0.9, 0.8], 0.07)
 }

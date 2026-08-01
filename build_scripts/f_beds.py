@@ -241,6 +241,186 @@ def build():
     print("bedrooms built")
 
 
+def _pan_ring(hw, yb, yf, z, n=44, waist=0.38):
+    """One horizontal section through a china pan.  Not an ellipse and not a
+    rounded rectangle: an egg.  The widest line sits back of centre (`waist` of
+    the way from the back), the tail behind it is blunt and the nose in front of
+    it is long and tapered, which is what makes a lavatory read as a lavatory
+    rather than as a lathed bollard."""
+    cy = yb + (yf - yb) * waist
+    ring = []
+    for i in range(n):
+        a = 2.0 * math.pi * i / n
+        c = math.cos(a)
+        ring.append((hw * math.sin(a),
+                     cy + (yf - cy) * c if c >= 0 else cy + (cy - yb) * c,
+                     z))
+    return ring
+
+
+def water_closet(name, cx, cy, cname, wht, chrome, wall_y):
+    """A close-coupled two-piece WC standing against a wall to the south.
+    Local +Y is the way it faces.  The old one was a lathed bowl and a plain
+    box - round in plan, which no lavatory is, and with the tank simply floating
+    behind it.  This one is lofted from real sections: a flared foot, a waisted
+    ankle, an egg-shaped bowl hollowed down to the trap, a squared casting shelf
+    for the tank to bolt to, seat and lid, trip lever and supply."""
+    # One vertical stack of numbers, so nothing can drift out of register:
+    # rim -> seat -> lid -> the shelf the closed lid stops against -> tank.
+    RIM = 0.395
+    SEAT_T, LID_T = 0.019, 0.026
+    SHELF_Z = RIM + SEAT_T + LID_T + 0.007      # 0.446
+    TANK_Z, TLID_Z = SHELF_Z + 0.310, SHELF_Z + 0.340
+    HW, YB, YF = 0.185, -0.118, 0.352           # rim, at its widest: 0.47 long
+    SY = -0.254                                 # centre of tank/shelf in Y
+    parts = []
+    rings = [
+        # skirt -> waisted ankle -> bowl.  The rim's outline sits forward of the
+        # skirt's, so the china tucks back under itself towards the wall the way
+        # a cast trapway does instead of standing on a straight lathed column.
+        _pan_ring(0.118, -0.290, 0.150, 0.000),
+        _pan_ring(0.112, -0.288, 0.144, 0.024),
+        _pan_ring(0.090, -0.280, 0.110, 0.130),
+        _pan_ring(0.100, -0.276, 0.138, 0.208),
+        _pan_ring(0.140, -0.240, 0.226, 0.284),
+        _pan_ring(0.174, -0.172, 0.314, 0.356),
+        # the top ring is repeated so the lip reads as a hard edge rather than
+        # rolling over into the flare below it
+        _pan_ring(HW, YB, YF, RIM - 0.014),
+        _pan_ring(HW, YB, YF, RIM),
+        # ...and back down the inside to the trap outlet
+        _pan_ring(0.152, YB + 0.022, 0.282, RIM - 0.004),
+        _pan_ring(0.132, YB + 0.038, 0.252, 0.347),
+        _pan_ring(0.102, YB + 0.064, 0.192, 0.282),
+        _pan_ring(0.064, YB + 0.098, 0.118, 0.228),
+        _pan_ring(0.032, YB + 0.122, 0.062, 0.202),
+    ]
+    pan = mlib.loft(name + "_pan", rings, close_v=True, cname=cname,
+                    cap_start=True, cap_end=True)
+    mlib.smooth_shade(pan, 44)
+    parts.append(pan)
+    # The plinth the tank bolts down onto, lofted rather than boxed: narrow and
+    # deep where it grows out of the skirt, spreading at the top.  As a plain
+    # block it hung off the back of the pedestal.  It is deliberately narrower
+    # than the tank, so the tank overhangs it the way a real one does and there
+    # is somewhere underneath for the supply to land.
+    shelf = mlib.loft(name + "_shelf", [
+        # every ring flush with the tank's back face at -0.352, so the plinth
+        # cannot creep out behind the tank and into the wall
+        [(x, y - 0.250, 0.170) for (x, y) in mlib.rounded_rect(0.196, 0.204, 0.046, 4)],
+        [(x, y - 0.246, 0.290) for (x, y) in mlib.rounded_rect(0.250, 0.212, 0.044, 4)],
+        [(x, y - 0.257, 0.396) for (x, y) in mlib.rounded_rect(0.310, 0.190, 0.036, 4)],
+        [(x, y - 0.264, SHELF_Z) for (x, y) in mlib.rounded_rect(0.330, 0.176, 0.030, 4)],
+    ], close_v=True, cname=cname, cap_start=True, cap_end=True)
+    mlib.bevel(shelf, 0.008, 2, 52)
+    mlib.smooth_shade(shelf, 46)
+    parts.append(shelf)
+    # ...and the low flat between the rim and the plinth that the seat's hinge
+    # bolts pass through.  Without it the seat hinged onto thin air.
+    flat = mlib.prism(name + "_hflat",
+                      mlib.rounded_rect(0.320, 0.090, 0.026, 3), 0.320, RIM,
+                      cname)
+    mlib.translate(flat, (0.0, -0.150, 0.0))
+    mlib.bevel(flat, 0.008, 2, 50)
+    parts.append(flat)
+    # tank, and its lid overhanging on every side
+    tank = mlib.prism(name + "_tank",
+                      mlib.rounded_rect(0.428, 0.196, 0.026, 4),
+                      SHELF_Z - 0.006, TANK_Z, cname)
+    mlib.translate(tank, (0.0, SY, 0.0))
+    mlib.bevel(tank, 0.012, 3, 46)
+    parts.append(tank)
+    lid = mlib.prism(name + "_tanklid",
+                     mlib.rounded_rect(0.452, 0.220, 0.030, 4), TANK_Z, TLID_Z,
+                     cname)
+    mlib.translate(lid, (0.0, SY, 0.0))
+    mlib.bevel(lid, 0.009, 3, 46)
+    parts.append(lid)
+    body = mlib.join(parts, name, cname)
+    mlib.set_mat(body, wht)
+
+    # ------------------------------------------------------------ seat + lid
+    # Both follow the rim's own outline, so they overhang it by a constant few
+    # millimetres the whole way round instead of by an eyeballed offset.
+    plan = [(v[0], v[1]) for v in _pan_ring(HW, YB, YF, 0.0)]
+    cyw = YB + (YF - YB) * 0.38                 # the outline's own centre
+
+    def ring2d(k, dy=0.0):
+        return [(x * k, cyw + (y - cyw) * k + dy) for (x, y) in plan]
+
+    # The seat only just stands proud of the china - at 1.026 it overhung far
+    # enough to hide the rim, and seat, lid and rim then read as three stacked
+    # discs of the same thickness.  The lid is lofted with a slight dome so its
+    # edge tapers instead of showing as a second flat band under the first.
+    seat = mlib.prism(name + "_seat", ring2d(1.008), RIM, RIM + SEAT_T, cname)
+    hole = mlib.prism(name + "_seatcut", ring2d(0.660, 0.030), RIM - 0.02,
+                      RIM + 0.06, cname)
+    mlib.boolean(seat, hole)
+    mlib.bevel(seat, 0.006, 3, 46)
+    mlib.smooth_shade(seat, 40)
+    slid = mlib.loft(name + "_lid", [
+        [(x, y, RIM + SEAT_T) for (x, y) in ring2d(1.018)],
+        [(x, y, RIM + SEAT_T + LID_T * 0.62) for (x, y) in ring2d(1.014)],
+        [(x, y, RIM + SEAT_T + LID_T) for (x, y) in ring2d(0.930)],
+    ], close_v=True, cname=cname, cap_start=True, cap_end=True)
+    mlib.bevel(slid, 0.008, 3, 52)
+    mlib.smooth_shade(slid, 44)
+    seatp = mlib.join([seat, slid], name + "_seat", cname)
+    mlib.set_mat(seatp, wht)
+
+    # ------------------------------------------------------- chrome fittings
+    TKF = SY + 0.098                            # tank's front face
+    fit = []
+    # trip lever: escutcheon on the tank's left cheek and a lever raked down
+    esc = mlib.revolve(name + "_esc", [(0.0, 0.0), (0.020, 0.0), (0.019, 0.014),
+                                       (0.010, 0.020), (0.0, 0.020)], 14,
+                       cname=cname)
+    mlib.rot_x(esc, -math.pi / 2)
+    mlib.translate(esc, (-0.128, TKF - 0.004, TANK_Z - 0.072))
+    fit.append(esc)
+    fit.append(mlib.tube_along(name + "_lever",
+                               [(-0.128, TKF + 0.016, TANK_Z - 0.072),
+                                (-0.128, TKF + 0.024, TANK_Z - 0.074),
+                                (-0.052, TKF + 0.028, TANK_Z - 0.102)],
+                               mlib.rounded_rect(0.022, 0.008, 0.004, 2), cname))
+    # angle stop screwed to the wall behind, and the supply up to the tank.
+    # It stands outboard of the tank lid so nothing is buried in the china.
+    wy = wall_y - cy
+    stop = mlib.revolve(name + "_stop",
+                        [(0.0, 0.0), (0.022, 0.0), (0.022, 0.052),
+                         (0.030, 0.058), (0.030, 0.070), (0.0, 0.070)], 14,
+                        cname=cname)
+    mlib.rot_x(stop, -math.pi / 2)          # flange on the plaster, body forward
+    mlib.translate(stop, (-0.242, wy, 0.190))
+    fit.append(stop)
+    sup = mlib.bez((wy + 0.068, 0.190), (wy + 0.200, 0.198),
+                   (wy + 0.160, 0.340), (wy + 0.076, SHELF_Z - 0.024), n=10)
+    n = len(sup) - 1
+    fit.append(mlib.tube_along(name + "_supply",
+                               [(-0.242 + 0.057 * (i / n), q[0], q[1])
+                                for i, q in enumerate(sup)],
+                               mlib.circle(0.0095, 10), cname))
+    nut = mlib.revolve(name + "_nut", [(0.0, 0.0), (0.021, 0.0), (0.021, 0.030),
+                                       (0.0, 0.030)], 12, cname=cname)
+    mlib.translate(nut, (-0.185, sup[-1][0], SHELF_Z - 0.034))
+    fit.append(nut)
+    # seat hinge: the two barrels that sit on the flat behind the seat
+    for sx in (-0.076, 0.076):
+        h = mlib.revolve(name + "_hg", [(0.0, 0.0), (0.013, 0.0), (0.013, 0.054),
+                                        (0.0, 0.054)], 12, cname=cname)
+        mlib.rot_y(h, math.pi / 2)
+        mlib.translate(h, (sx - 0.027, -0.150, RIM + 0.013))
+        fit.append(h)
+    fo = mlib.join(fit, name + "_fittings", cname)
+    mlib.smooth_shade(fo, 38)
+    mlib.set_mat(fo, chrome)
+
+    out = [body, seatp, fo]
+    for o in out:
+        mlib.translate(o, (cx, cy, 0.0))
+    return out
+
+
 def dress_hall():
     """The bathroom hallway dressing (unchanged), kept separate from the beds."""
     ML2 = FL.mk_mats()
@@ -387,21 +567,12 @@ def dress_hall():
     mg = mlib.box("BA_mirror", BX - 0.235, L.BA_Y[1] - 0.175, 1.15,
                   BX + 0.235, L.BA_Y[1] - 0.158, 1.63, B)
     mlib.set_mat(mg, mats.metal('mirror_glass', 'F0F2F4', rough=0.02, bump=0.0))
-    # WC against the east wall, south of the basin
-    lo = mlib.revolve("BA_wc", [(0.0, 0.0), (0.16, 0.0), (0.15, 0.10),
-                                (0.19, 0.34), (0.22, 0.38), (0.0, 0.40)], 22,
-                      cname=B)
-    mlib.smooth_shade(lo, 36)
-    mlib.set_mat(lo, wht)
-    # Against the SOUTH wall now, not the east one.  On the east wall it stood
-    # inside the doorway's swept quadrant, which is what stopped the door from
-    # opening inwards; the deeper room gives it a wall of its own.
-    WX, WY = L.BA_X[0] + 1.22, L.BA_Y[0] + 0.34
-    mlib.translate(lo, (WX, WY, 0.0))
-    cis = mlib.box("BA_cistern", WX - 0.20, WY - 0.33, 0.40, WX + 0.20,
-                   WY - 0.11, 0.78, B)
-    mlib.bevel(cis, 0.012, 2, 45)
-    mlib.set_mat(cis, wht)
+    # WC in the inner corner, tank to the south wall.  It stood out in the
+    # middle of that wall before, marooned on open floor; a lavatory is always
+    # pushed into the corner furthest from the door.  0.40 from the centreline
+    # to the west wall is the tightest a real one is ever set.
+    WX, WY = L.BA_X[0] + 0.40, L.BA_Y[0] + 0.376
+    water_closet("BA_wc", WX, WY, B, wht, chrome, L.BA_Y[0])
     # bathroom overhead: a fitting, not a bare lamp floating under the ceiling
     P.flush_dome("BA_light", ((L.BA_X[0] + L.BA_X[1]) * 0.5,
                               (L.BA_Y[0] + L.BA_Y[1]) * 0.5, 2.62),

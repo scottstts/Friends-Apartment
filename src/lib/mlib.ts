@@ -466,6 +466,61 @@ export function hollowPrism(
   return m
 }
 
+/** A closed, through-cut annular z-prism with rounded inner and outer edges.
+ * This is the direct mesh equivalent of beveling a Blender boolean-cut ring,
+ * without leaving a false cavity floor across the opening. */
+export function annularPrism(outerPoly: Vec2[], innerPoly: Vec2[], z0: number, z1: number, bevelRadius = 0, bevelSegments = 1): MeshData {
+  const n = outerPoly.length
+  if (innerPoly.length !== n) throw new Error('annularPrism: outline vertex counts must match')
+
+  const radius = Math.max(0, Math.min(bevelRadius, (z1 - z0) / 2 - 1e-5))
+  const segments = Math.max(1, bevelSegments)
+  const levels: { inset: number; z: number }[] = []
+  if (radius > 0) {
+    for (let k = 0; k <= segments; k++) {
+      const a = (Math.PI / 2) * (k / segments)
+      levels.push({ inset: radius * (1 - Math.sin(a)), z: z0 + radius * (1 - Math.cos(a)) })
+    }
+    for (let k = 0; k <= segments; k++) {
+      const a = (Math.PI / 2) * (k / segments)
+      levels.push({ inset: radius * (1 - Math.cos(a)), z: z1 - radius * (1 - Math.sin(a)) })
+    }
+  } else {
+    levels.push({ inset: 0, z: z0 }, { inset: 0, z: z1 })
+  }
+
+  const verts: Vec3[] = []
+  for (const level of levels) {
+    for (const [x, y] of insetPolyLocal(outerPoly, level.inset)) verts.push([x, y, level.z])
+    for (const [x, y] of insetPolyLocal(innerPoly, -level.inset)) verts.push([x, y, level.z])
+  }
+
+  const faces: number[][] = []
+  const stride = n * 2
+  for (let level = 0; level < levels.length - 1; level++) {
+    const a = level * stride
+    const b = (level + 1) * stride
+    for (let j = 0; j < n; j++) {
+      const j2 = (j + 1) % n
+      faces.push([a + j, a + j2, b + j2, b + j])
+      faces.push([a + n + j2, a + n + j, b + n + j, b + n + j2])
+    }
+  }
+
+  const bottom = 0
+  const top = (levels.length - 1) * stride
+  for (let j = 0; j < n; j++) {
+    const j2 = (j + 1) % n
+    faces.push([bottom + j2, bottom + j, bottom + n + j, bottom + n + j2])
+    faces.push([top + j, top + j2, top + n + j2, top + n + j])
+  }
+
+  const m = MeshData.from(verts, faces)
+  recalcNormals(m)
+  smoothShade(m, 40)
+  return m
+}
+
 function insetPolyLocal(poly: Vec2[], d: number): Vec2[] {
   const n = poly.length
   const out: Vec2[] = []

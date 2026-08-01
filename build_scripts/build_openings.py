@@ -275,8 +275,19 @@ def build(M=None):
     # wall, the leaf swings *in* - which is where a bathroom door belongs.  It
     # used to open into the hallway only because it fouled the bowl at about
     # fifteen degrees the other way.
+    # Standing right back against its own wall.  swing_leaf pivots the leaf
+    # about a point on its face, so where that point sits is what limits the
+    # swing: 30 mm inside the reveal and the leaf ate into the jamb past 127
+    # deg, while 84 deg left it stranded across the middle of a room that has
+    # nothing in that quadrant to stop it.  Put the pivot on the arris (held
+    # 6 mm clear of the plaster) and the leaf itself never reaches the wall at
+    # any angle - what runs out first is the knob on its back face, which
+    # touches at about 174.  165 keeps 111 mm behind the knob.  Nothing in the
+    # room is even close: the tip lands at (3.04, 6.32), 0.27 m short of the
+    # basin, and the tub is a full metre from the hinge - further than the leaf
+    # is long, so it could never have been reached whatever the angle.
     swing_leaf("BD_leaf", bdw - 0.050, L.BD_H - 0.028,
-               (L.HALL_WW[0] + 0.030, L.BD_Y[1] - 0.045), (0.0, -1.0), 84.0, M,
+               (L.HALL_WW[0] - 0.006, L.BD_Y[1] - 0.024), (0.0, -1.0), 165.0, M,
                "Bathroom", M['trim'], t=0.040)
 
     # ============ CLOSET DOOR (green, head of the hallway, faces south) =====

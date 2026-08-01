@@ -374,8 +374,9 @@ export function build(w: World, M?: MatSet): MatSet {
     const bcs = O.casing(bdw, L.BD_H, 0.09, 0.022)
     O.place(bcs, [L.HALL_X[0], bdc, 0.0], [0, -1], [1, 0])
     w.add(bcs, M.trim)
-    // The deeper bathroom clears the WC, so the leaf now swings inward.
-    swingLeaf(w, bdw - 0.05, L.BD_H - 0.028, [L.HALL_WW[0] + 0.03, L.BD_Y[1] - 0.045], [0.0, -1.0], 84.0, M, M.trim, 0.04)
+    // Pivot on the jamb arris so the leaf can stand back against its own wall;
+    // 165 degrees leaves clearance behind the knob and keeps the basin clear.
+    swingLeaf(w, bdw - 0.05, L.BD_H - 0.028, [L.HALL_WW[0] - 0.006, L.BD_Y[1] - 0.024], [0.0, -1.0], 165.0, M, M.trim, 0.04)
   }
 
   // ============ CLOSET DOOR (green, head of the hallway, faces south) =====
