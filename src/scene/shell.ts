@@ -229,7 +229,8 @@ export function build(w: World): MatSet {
     M.lav,
   )
   // -- header over the alcove opening
-  w.add(W.wall([L.AL_X[0], L.AL_S], [L.AL_X[1], L.AL_S], L.AL_Z, CZ, 0.22), M.cream)
+  const alcoveHeaderDepth = 0.22
+  w.add(W.wall([L.AL_X[0], L.AL_S], [L.AL_X[1], L.AL_S], L.AL_Z, CZ, alcoveHeaderDepth), M.cream)
   // -- west downstand closing the lower alcove ceiling against the main one
   w.add(W.wall([L.AL_X[0], L.AL_S], [L.AL_X[0], L.NYW], L.AL_Z, CZ, 0.1), M.cream)
   // -- central wall: Rachel's doorway at the south, Monica's door at the north
@@ -292,7 +293,9 @@ export function build(w: World): MatSet {
 
   // ------------------------------------------------------------- ceilings
   w.add(mlib.prism(mainPoly, CZ, CZ + 0.1), M.ceil)
-  w.add(mlib.box(L.AL_X[0], L.AL_S, L.AL_Z, L.AL_X[1], L.NYW, L.AL_Z + 0.1), M.ceil)
+  // Start behind the header instead of overlapping its lower front face; the
+  // shared coplanar band was flickering above the living-room window.
+  w.add(mlib.box(L.AL_X[0], L.AL_S + alcoveHeaderDepth, L.AL_Z, L.AL_X[1], L.NYW, L.AL_Z + 0.1), M.ceil)
 
   // ---------------------------------------------------------------- trim
   const per: [number, number][] = [
