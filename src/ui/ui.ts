@@ -85,10 +85,11 @@ canvas { display: block; }
 .stack {
   position: relative; display: flex; flex-direction: column; align-items: center;
   text-align: center; gap: clamp(18px, 4.2vh, 44px); padding: 0 24px;
-  transform: translateY(1.2vh);
+  transform: translateY(1.2vh); isolation: isolate;
 }
-.emblem { transition: filter 0.45s ease; }
-.emblem svg { display: block; height: clamp(190px, 37vmin, 340px); width: auto; }
+.emblem { position: relative; z-index: 1; transition: filter 0.45s ease; }
+.emblem svg { display: block; overflow: visible; height: clamp(190px, 37vmin, 340px); width: auto; }
+.titles { position: relative; z-index: 0; }
 .fatal .emblem svg { height: clamp(160px, 30vmin, 270px); }
 .intro.ready:hover .emblem, .intro.ready:focus-visible .emblem { filter: brightness(1.07); }
 
