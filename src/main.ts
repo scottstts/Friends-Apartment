@@ -8,6 +8,7 @@ import { ao } from 'three/examples/jsm/tsl/display/GTAONode.js'
 import { World } from './scene/world'
 import { buildAll } from './scene/build'
 import { PlayerControls } from './player/controls'
+import { SeatingSystem } from './player/seats'
 import { Ui } from './ui/ui'
 import { applyCameraBookmark, inspectionFromUrl } from './scene/cameras'
 import { blenderFilmicVeryHighContrast } from './filmic'
@@ -77,6 +78,7 @@ async function boot(): Promise<void> {
   camera.up.set(0, 0, 1)
 
   let controls: PlayerControls | null = null
+  let seats: SeatingSystem | null = null
   let started = false
 
   const ui = new Ui({
@@ -104,6 +106,7 @@ async function boot(): Promise<void> {
 
   controls = new PlayerControls(camera, world.colliders)
   controls.spawn(2.3, -1.15, 6.4, 3.9)
+  if (!inspection) seats = new SeatingSystem(controls, camera)
   if (inspection) {
     applyCameraBookmark(camera, inspection.view)
     ui.enterGame()
@@ -203,6 +206,7 @@ async function boot(): Promise<void> {
   const renderFrame = (): void => {
     const dt = clock.getDelta()
     if (!inspection && controls?.enabled) controls.update(dt)
+    seats?.update(dt)
     if (warmFrames < shadows.length) {
       shadows[warmFrames].needsUpdate = true
     }

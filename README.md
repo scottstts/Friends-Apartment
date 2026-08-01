@@ -3,6 +3,7 @@
 A procedural Three.js WebGPU recreation of Monica's apartment from *Friends*. Use WASD to walk, the mouse to look, and Escape to pause.
 
 ![Monica's Apartment](assets/screenshot.jpeg)
+**Play Live: *https://friends3.scottsun.io***
 
 ## Requirements
 

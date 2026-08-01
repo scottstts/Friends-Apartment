@@ -4,10 +4,28 @@
 import * as THREE from 'three/webgpu'
 import type { Obb } from '../scene/world'
 
-const EYE = 1.62
+export const EYE = 1.62
 const RADIUS = 0.24
 const SPEED = 1.65 // m/s, an interior walking pace
 const ACCEL = 11.0
+
+/** Z-up first-person pose: build the camera basis directly from yaw/pitch,
+ * with an optional roll of the up vector.  Shared by the walker and the
+ * seating choreography so handovers are exact. */
+export function applyPose(
+  camera: THREE.PerspectiveCamera,
+  x: number,
+  y: number,
+  z: number,
+  yaw: number,
+  pitch: number,
+  roll = 0,
+): void {
+  const cp = Math.cos(pitch)
+  camera.up.set(Math.sin(roll) * Math.cos(yaw), Math.sin(roll) * Math.sin(yaw), 1).normalize()
+  camera.position.set(x, y, z)
+  camera.lookAt(x - Math.sin(yaw) * cp, y + Math.cos(yaw) * cp, z + Math.sin(pitch))
+}
 
 export class PlayerControls {
   readonly camera: THREE.PerspectiveCamera
@@ -20,6 +38,11 @@ export class PlayerControls {
   private bobPhase = 0
   private bobAmp = 0
   enabled = false
+  /** While true an external director (the seating system) owns the pose and
+   * the camera; walking, collision and the bob all stand down. */
+  external = false
+  /** Mouse look suspended during scripted sit/stand transitions. */
+  lookLocked = false
 
   constructor(camera: THREE.PerspectiveCamera, colliders: Obb[]) {
     this.camera = camera
@@ -30,7 +53,7 @@ export class PlayerControls {
     window.addEventListener('keyup', (e) => this.keys.delete(e.code))
     window.addEventListener('blur', () => this.keys.clear())
     document.addEventListener('mousemove', (e) => {
-      if (!this.enabled) return
+      if (!this.enabled || this.lookLocked) return
       this.yaw -= e.movementX * 0.0022
       this.pitch -= e.movementY * 0.0022
       const lim = Math.PI / 2 - 0.03
@@ -46,7 +69,26 @@ export class PlayerControls {
     this.syncCamera(0)
   }
 
+  getPose(): { x: number; y: number; yaw: number; pitch: number } {
+    return { x: this.pos.x, y: this.pos.y, yaw: this.yaw, pitch: this.pitch }
+  }
+
+  setLook(yaw: number, pitch: number): void {
+    this.yaw = yaw
+    const lim = Math.PI / 2 - 0.03
+    this.pitch = Math.max(-lim, Math.min(lim, pitch))
+  }
+
+  /** Hand the walker back, at rest, where a scripted move ended. */
+  place(x: number, y: number, yaw: number, pitch: number): void {
+    this.pos.set(x, y)
+    this.vel.set(0, 0)
+    this.bobAmp = 0
+    this.setLook(yaw, pitch)
+  }
+
   update(dt: number): void {
+    if (this.external) return
     dt = Math.min(dt, 0.05)
     let fx = 0
     let fy = 0
@@ -127,16 +169,14 @@ export class PlayerControls {
     const bobZ = Math.sin(this.bobPhase * 2.0) * 0.014 * this.bobAmp
     const bobX = Math.sin(this.bobPhase) * 0.008 * this.bobAmp
     const rollT = Math.sin(this.bobPhase) * 0.0035 * this.bobAmp
-    // scene is Z-up; build the camera basis directly
-    const cp = Math.cos(this.pitch)
-    const dir = new THREE.Vector3(-Math.sin(this.yaw) * cp, Math.cos(this.yaw) * cp, Math.sin(this.pitch))
-    const eye = new THREE.Vector3(
+    applyPose(
+      this.camera,
       this.pos.x + Math.cos(this.yaw) * bobX,
       this.pos.y + Math.sin(this.yaw) * bobX,
       EYE + bobZ,
+      this.yaw,
+      this.pitch,
+      rollT,
     )
-    this.camera.up.set(Math.sin(rollT) * Math.cos(this.yaw), Math.sin(rollT) * Math.sin(this.yaw), 1).normalize()
-    this.camera.position.copy(eye)
-    this.camera.lookAt(eye.clone().add(dir))
   }
 }
