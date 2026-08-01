@@ -163,7 +163,13 @@ export class World {
     energy: number,
     color: [number, number, number],
     size = 0.05,
-    opts: { shadow?: boolean; distance?: number; shadowIntensity?: number } = {},
+    opts: {
+      shadow?: boolean
+      distance?: number
+      shadowIntensity?: number
+      shadowMapSize?: number
+      shadowRadius?: number
+    } = {},
   ): THREE.PointLight {
     const l = new THREE.PointLight(new THREE.Color(...color), energy / (4 * Math.PI))
     l.position.set(...loc)
@@ -171,7 +177,8 @@ export class World {
     if (opts.distance !== undefined) l.distance = opts.distance
     if (opts.shadow !== false) {
       l.castShadow = true
-      l.shadow.mapSize.set(512, 512)
+      const shadowMapSize = opts.shadowMapSize ?? 512
+      l.shadow.mapSize.set(shadowMapSize, shadowMapSize)
       l.shadow.camera.near = 0.04
       l.shadow.camera.far = 14
       l.shadow.bias = -0.0015
@@ -179,7 +186,7 @@ export class World {
       // PointShadowFilter interprets this in cube-map texels. Keep the kernel
       // compact: physical area-light contact shadows start sharp and widen
       // with separation, whereas a large constant kernel erases small props.
-      l.shadow.radius = Math.max(2, size * 50)
+      l.shadow.radius = opts.shadowRadius ?? Math.max(2, size * 50)
       // Cycles returns indirect practical-light bounce inside a cast shadow;
       // PCF has neither emissive-mesh GI nor distance-dependent area penumbrae.
       // Fixtures can therefore specify a measured residual according to their

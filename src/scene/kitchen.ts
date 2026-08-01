@@ -916,6 +916,12 @@ function potRack(w: World, M: MatSet): void {
 
 function ceilingDome(w: World, loc: Vec3, M: MatSet, r = 0.165, energy = 300.0, kelvin = 6000.0): void {
   const brass = M.brass ?? mats.metal('brass_fitting', 'A8813C', { rough: 0.32, bump: 0.04 })
+  // An analytic source cannot distinguish its own fixture from other casters.
+  // Keep this emitter assembly out of the binary depth pass so it cannot cast
+  // an enlarged silhouette of itself onto the ceiling or distant walls.
+  const fixtureBrass = brass.clone()
+  fixtureBrass.name = 'kitchen_ceiling_brass'
+  fixtureBrass.userData.noShadow = true
   const can = mlib.revolve(
     [
       [0.0, 0.0],
@@ -947,7 +953,7 @@ function ceilingDome(w: World, loc: Vec3, M: MatSet, r = 0.165, energy = 300.0, 
   )
   for (const o of [can, stem, gal]) {
     mlib.translate(o, loc)
-    w.add(o, brass)
+    w.add(o, fixtureBrass)
   }
   const prof: Vec2[] = []
   for (let i = 0; i < 15; i++) {
@@ -970,8 +976,10 @@ function ceilingDome(w: World, loc: Vec3, M: MatSet, r = 0.165, energy = 300.0, 
   // plus a stronger soft mask restores the reference's depth and saturation.
   const visualEnergy = energy * 0.9
   const visualKelvin = Math.min(kelvin, 4200)
-  w.pointLight([loc[0], loc[1], loc[2] - 0.232], visualEnergy, P.blackbody(visualKelvin), 0.1, {
+  w.pointLight([loc[0], loc[1], loc[2] - 0.35], visualEnergy, P.blackbody(visualKelvin), 0.1, {
     shadowIntensity: 0.6,
+    shadowMapSize: 1024,
+    shadowRadius: 1,
   })
 }
 
@@ -1001,12 +1009,17 @@ function rattanPendant(w: World, loc: Vec3, r = 0.235, h = 0.225, drop = 1.05): 
     bump: 0.8,
     centre: [loc[0], loc[1]],
   })
+  const fixtureWicker = wk.clone()
+  fixtureWicker.name = 'kitchen_pendant_wicker'
+  fixtureWicker.userData.noShadow = true
   const sh = mlib.revolve(prof, 32, { capStart: false, capEnd: false })
   mlib.solidify(sh, 0.008)
   mlib.smoothShade(sh, 46)
   mlib.translate(sh, loc)
-  w.add(sh, wk)
-  const cordMat = mats.paint('cord_black', '18181A', { rough: 0.5 })
+  w.add(sh, fixtureWicker)
+  const cordMat = mats.paint('cord_black', '18181A', { rough: 0.5 }).clone()
+  cordMat.name = 'kitchen_pendant_cord'
+  cordMat.userData.noShadow = true
   const cord = mlib.tubeAlong(
     [
       [0, 0, h],
@@ -1026,7 +1039,7 @@ function rattanPendant(w: World, loc: Vec3, r = 0.235, h = 0.225, drop = 1.05): 
     16,
   )
   mlib.translate(cap, loc)
-  w.add(cap, mats.get('cord_black')!)
+  w.add(cap, cordMat)
   const bulbMd = mlib.revolve(
     [
       [0.0, 0.0],
@@ -1043,7 +1056,13 @@ function rattanPendant(w: World, loc: Vec3, r = 0.235, h = 0.225, drop = 1.05): 
   mlib.smoothShade(bulbMd, 40)
   mlib.translate(bulbMd, loc)
   w.add(bulbMd, mats.get('bulb_warm') ?? mats.emissive('bulb_warm', 'FFE0AE', { strength: 46.0, base: 'FFF3E2' }))
-  w.pointLight([loc[0], loc[1], loc[2] + h * 0.42], 32.0, [1.0, 0.82, 0.62], 0.06)
+  // Keep the analytic source just below the open shade. Placing it inside the
+  // wicker makes the nearby shade fill most of the point-light cube map and
+  // projects a hugely magnified self-shadow onto the far living-room wall.
+  w.pointLight([loc[0], loc[1], loc[2] - 0.04], 32.0, [1.0, 0.82, 0.62], 0.06, {
+    shadowMapSize: 1024,
+    shadowRadius: 1,
+  })
 }
 
 function placeChamfer(ob: MeshData, u: number, z: number, off = 0.02): MeshData {

@@ -1322,9 +1322,9 @@ function ceilingLight(w: World, cx: number, cy: number, M: MatSet, energy = 350.
   const ob = mlib.join(parts)
   mlib.smoothShade(ob, 38)
   mlib.translate(ob, [cx, cy, 0.0])
-  // The analytic light sits inside this assembly. Keep its local brass shell
-  // visible but out of the binary depth pass, otherwise cube-face seams from
-  // fixture self-occlusion project a square pool onto the ceiling.
+  // The point source sits below the fitting, so ordinary shadow casting would
+  // project the fitting back onto the ceiling. Treat the visible emitter shell
+  // like the opal and bulb materials and omit it from the binary depth pass.
   const fixtureBrass = M.brass.clone()
   fixtureBrass.name = 'living_ceiling_brass'
   fixtureBrass.userData.noShadow = true
@@ -1352,7 +1352,13 @@ function ceilingLight(w: World, cx: number, cy: number, M: MatSet, energy = 350.
   // lower power and a warmer CCT, with a strong soft mask for room grounding.
   const visualEnergy = energy * 0.62
   const visualKelvin = Math.min(kelvin, 4100)
-  w.pointLight([cx, cy, rimZ + 0.01], visualEnergy, P.blackbody(visualKelvin), 0.16, { shadowIntensity: 0.9 })
+  // Keep the source below the finial while the emitter shell stays excluded
+  // from shadow depth, preventing both wall and ceiling self-silhouettes.
+  w.pointLight([cx, cy, rimZ - 0.18], visualEnergy, P.blackbody(visualKelvin), 0.16, {
+    shadowIntensity: 0.9,
+    shadowMapSize: 1024,
+    shadowRadius: 1,
+  })
 }
 
 export function sconce(w: World, loc: Vec3, normal: Vec2, M: MatSet, energy = 13.0, shadow = false): void {
