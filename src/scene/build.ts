@@ -7,6 +7,7 @@ import type { World } from './world'
 import * as shell from './shell'
 import * as openings from './openings'
 import * as env from './env'
+import * as night from './night'
 import * as kitchen from './kitchen'
 import * as dining from './dining'
 import * as living from './living'
@@ -21,8 +22,12 @@ export async function buildAll(w: World): Promise<void> {
   await tick()
   openings.build(w)
   await tick()
-  env.build(w)
-  env.skyAndSun(w, 0.145, 2.4)
+  // Night conversion (user-directed deviation): the exterior set is still the
+  // build_env.py port; night.ts swaps only the world beyond it — sky, moon and
+  // city ambience in place of env.skyAndSun(w, 0.145, 2.4), which stays as the
+  // day parity baseline.
+  env.build(w, { kwSkylight: night.KW_SKYGLOW })
+  night.build(w)
   await tick()
   kitchen.build(w)
   await tick()

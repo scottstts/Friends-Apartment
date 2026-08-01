@@ -259,7 +259,14 @@ function facade(
   w.add(darkFaces, glass ?? lit!)
 }
 
-export function build(w: World): void {
+export interface EnvOpts {
+  /** The sky-panel standing in for the sky through the kitchen window.
+   * Defaults to build_env.py's sunlit light well; the night build passes a
+   * dim cool skyglow instead (night.KW_SKYGLOW). */
+  kwSkylight?: { energy: number; color: [number, number, number] }
+}
+
+export function build(w: World, opts: EnvOpts = {}): void {
   const mb = mats.brickWall('brick_exterior', { c1: '7C4636', c2: '5A3128', mortar: '8E8577' })
   const mLit = mats.emissive('win_lit', 'FFD9A0', { strength: 5.0, base: '2A2015' })
   const mDark = mats.paint('win_dark', '15161C', { rough: 0.16, coat: 0.5 })
@@ -337,11 +344,12 @@ export function build(w: World): void {
   // KW_skylight: the sky-panel standing in for daylight through the kitchen
   // window, aimed at the window it stands for.
   {
+    const kw = opts.kwSkylight ?? { energy: 260.0, color: [1.0, 0.95, 0.86] as [number, number, number] }
     const kp = L.chamferPt(0.72, -1.45)
     const wc = L.chamferPt(0.72, 0.0)
     const from = new THREE.Vector3(kp[0], kp[1], 2.1)
     const to = new THREE.Vector3(wc[0], wc[1], (L.KW_Z[0] + L.KW_Z[1]) * 0.5)
-    const spot = new THREE.SpotLight(new THREE.Color(1.0, 0.95, 0.86), 260.0 / Math.PI)
+    const spot = new THREE.SpotLight(new THREE.Color(...kw.color), kw.energy / Math.PI)
     spot.position.copy(from)
     spot.target.position.copy(to)
     spot.angle = 0.62
