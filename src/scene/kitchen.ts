@@ -405,7 +405,9 @@ function proRange(w: World, M: MatSet): void {
   const x0 = 0.0
   const x1 = CTR_D - 0.01
   const placed: [MeshData, THREE.Material][] = []
-  const body = mlib.box(x0, y0, 0.0, x1 - 0.02, y1, CTR_H - 0.015)
+  // Butt the body against the fascia instead of overlapping their top faces;
+  // that 32 mm coplanar overlap was the flickering bronze strip.
+  const body = mlib.box(x0, y0, 0.0, x1 - 0.052, y1, CTR_H - 0.015)
   mlib.bevel(body, 0.006, 2)
   placed.push([body, M.steel])
   const fas = mlib.box(x1 - 0.052, y0, CTR_H - 0.19, x1, y1, CTR_H - 0.015)
