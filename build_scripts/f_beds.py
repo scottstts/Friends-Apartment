@@ -102,7 +102,11 @@ def bed(name, cy, M, quilt, cname=B):
     mat_ = mlib.cushion(name + "_mat", L.BED_L - 0.12, w - 0.10, 0.22, 0.06, cname)
     mlib.translate(mat_, ((x0 + x1) / 2 - 0.02, cy, 0.40))
     mlib.set_mat(mat_, M['linen'])
-    duv = bedspread(name + "_duv", (x0 + x1) / 2 - 0.13, cy, L.BED_L - 0.26,
+    # The spread has to hang PAST the mattress at the foot.  At BED_L - 0.26 its
+    # foot fall landed within about 10 mm of the mattress's own bulged end face
+    # (cushion() swells to 1.055 of its plan outline at mid height), and the two
+    # surfaces z-fought along that edge on both beds.
+    duv = bedspread(name + "_duv", (x0 + x1) / 2 - 0.12, cy, L.BED_L - 0.02,
                     w + 0.14, 0.665, 0.30, cname, seed=int(abs(cy) * 97) % 991)
     mlib.set_mat(duv, quilt)
     for s in (-1, 1):
@@ -221,17 +225,18 @@ def build():
 
     # ------------------------------------------------------ Monica's bedroom
     bed("MB_bed", L.MB_WIN_Y, M, M['quiltB'])
-    # at MB_Y[1] - 1.00 the chest stood square in Monica's doorway; it belongs
-    # on the solid stretch of that wall, south of the opening
-    chest("MB_chest", L.BED_X[0] + 0.28, L.MB_Y[0] + 0.85, 0.0, M)
+    # Her doorway moved south down this wall, so the chest, the picture over it
+    # and the sconce all key off the door's north jamb rather than off the room,
+    # which is what kept putting the chest in the opening.
+    chest("MB_chest", L.BED_X[0] + 0.28, L.MD_Y[1] + 0.68, 0.0, M)
     area_rug("MB_rug", 9.90, L.MB_WIN_Y + 0.10, 1.60, 2.10, M)
-    P.framed("MB_art", 0.36, 0.46, (L.EXW + 0.030, L.MB_Y[1] - 2.25, 1.62),
+    P.framed("MB_art", 0.36, 0.46, (L.EXW + 0.030, L.MD_Y[1] + 0.68, 1.62),
              (1, 0), B, framemat=gold,
              artmat=mats.botanical('art_mb', normal=(1, 0), seed=19,
                                    ground='E2DCC4', stem='4C5C38',
                                    leafc=('44583A', '7A8A5A'),
                                    bloom=('8A6C92', 'C7B2CE')))
-    FL.sconce("MB_sconce", (L.EXW + 0.02, L.MB_Y[1] - 1.75, 1.80), (1, 0), ML, B,
+    FL.sconce("MB_sconce", (L.EXW + 0.02, L.MB_Y[1] - 0.85, 1.80), (1, 0), ML, B,
               energy=16.0)
     print("bedrooms built")
 
@@ -241,9 +246,10 @@ def dress_hall():
     ML2 = FL.mk_mats()
     CH = "Hall"
     gold = mats.get('paint_gilt') or mats.paint('paint_gilt', 'C9A24A', rough=0.30)
+    # Two, stacked - the third, offset to the side, was one too many for a wall
+    # this narrow and broke the pair's symmetry.
     for i, (yy, zz, w, h) in enumerate(((4.36, 1.86, 0.24, 0.30),
-                                        (4.36, 1.50, 0.24, 0.30),
-                                        (4.66, 1.70, 0.22, 0.28))):
+                                        (4.36, 1.50, 0.24, 0.30))):
         P.framed("H_art%d" % i, w, h, (L.HALL_X[0] + 0.030, yy, zz), (1, 0), CH,
                  framemat=gold,
                  artmat=mats.botanical('art_hall_%d' % i, normal=(1, 0),
@@ -274,10 +280,17 @@ def dress_hall():
     tob = mlib.join(parts, "H_table", CH)
     mlib.smooth_shade(tob, 40)
     mlib.set_mat(tob, white)
-    mlib.translate(tob, (L.HALL_X[1] - 0.24, 5.10, 0.0))
-    FL.table_lamp("H_lamp", L.HALL_X[1] - 0.24, 5.10, 0.72, ML2, CH, energy=16.0,
+    # Up at the head of the hallway.  At y = 5.10 it stood against the stretch of
+    # east wall that has been taken out, so it was left facing open floor.
+    HTY = L.NW_Y - 0.45
+    mlib.translate(tob, (L.HALL_X[1] - 0.24, HTY, 0.0))
+    FL.table_lamp("H_lamp", L.HALL_X[1] - 0.24, HTY, 0.72, ML2, CH, energy=16.0,
                   scale=0.85)
-    FL.sconce("H_sconce", (L.HALL_X[0] + 0.02, 4.10, 1.78), (1, 0), ML2, CH,
+    # Centred over the pair of pictures and high enough to clear them.  At
+    # y = 4.10 its south arm hung 88 mm past the end of this wall (which starts
+    # at HALL_Y0 = 3.98), so from the room it read as a lamp cranked round the
+    # corner and pointing back down the hallway instead of straight off the wall.
+    FL.sconce("H_sconce", (L.HALL_X[0] + 0.02, 4.36, 2.16), (1, 0), ML2, CH,
               energy=11.0)
 
     # ------------------------------------------------------------ bathroom
@@ -380,13 +393,18 @@ def dress_hall():
                       cname=B)
     mlib.smooth_shade(lo, 36)
     mlib.set_mat(lo, wht)
-    WX, WY = L.BA_X[1] - 0.34, L.BA_Y[0] + 0.36
+    # Against the SOUTH wall now, not the east one.  On the east wall it stood
+    # inside the doorway's swept quadrant, which is what stopped the door from
+    # opening inwards; the deeper room gives it a wall of its own.
+    WX, WY = L.BA_X[0] + 1.22, L.BA_Y[0] + 0.34
     mlib.translate(lo, (WX, WY, 0.0))
-    cis = mlib.box("BA_cistern", WX - 0.20, WY - 0.32, 0.40, WX + 0.20,
-                   WY - 0.10, 0.78, B)
+    cis = mlib.box("BA_cistern", WX - 0.20, WY - 0.33, 0.40, WX + 0.20,
+                   WY - 0.11, 0.78, B)
     mlib.bevel(cis, 0.012, 2, 45)
     mlib.set_mat(cis, wht)
     # bathroom overhead: a fitting, not a bare lamp floating under the ceiling
-    P.flush_dome("BA_light", (2.20, 5.40, 2.62), cname=B, r=0.115, energy=15.0,
+    P.flush_dome("BA_light", ((L.BA_X[0] + L.BA_X[1]) * 0.5,
+                              (L.BA_Y[0] + L.BA_Y[1]) * 0.5, 2.62),
+                 cname=B, r=0.115, energy=17.0,
                  colr=(1.0, 0.90, 0.80), drop=0.070)
     print("hall/bath dressed")

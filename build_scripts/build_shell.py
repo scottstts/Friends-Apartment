@@ -67,7 +67,9 @@ def build():
     mlib.set_mat(sub, mats.paint('subfloor_dark', '2A1F16', rough=0.8))
     # 0.52 m module: the set's parquet reads big - roughly one tile per stride -
     # and at 0.445 the lattice was fussy enough to shimmer in the wide shots
-    par = s_floor.build(-0.45, L.SY - 0.45, 12.3, 6.9, T=0.52)
+    # y1 has to clear NW_Y: the bathroom/hall block pushes north past the flat's
+    # own north wall, and at 6.9 the boards stopped short of the new hallway.
+    par = s_floor.build(-0.45, L.SY - 0.45, 12.3, L.NW_Y + 0.55, T=0.52)
     mlib.set_mat(par, M['parquet'])
 
     # ---------------------------------------------------------------- walls
@@ -87,50 +89,76 @@ def build():
            mat=M['brick'])
     # -- hallway west wall: one solid, brick on the kitchen side, lavender/cream
     #    on the hallway side, bathroom door through it
-    hw = W.wall("W_hall_w", (L.HALL_X[0], L.HALL_Y0), (L.HALL_X[0], L.AL_Y[1]),
-                0, CZ, L.HALL_X[0] - L.HALL_WW[0],
-                [(L.BD_Y[0] - L.HALL_Y0, 0, L.BD_Y[1] - L.HALL_Y0, L.BD_H)],
-                mat=M['lav'], mats_extra=[M['cream'], M['brick']])
+    # Built in two courses split at the picture rail, like every other wall in
+    # the flat.  As one 0..CZ wall the hall face came out as single quads
+    # spanning 2.06..3.26, whose centres sit at 2.66 - below RAIL - so the
+    # "cream above the rail" pass matched nothing at all and the hallway ran
+    # lavender to the ceiling.
     xm = (L.HALL_WW[0] + L.HALL_X[0]) * 0.5
-    mlib.face_mat(hw, 1, lambda c, n: c.x > xm and c.z > RAIL)
-    mlib.face_mat(hw, 2, lambda c, n: c.x < xm)
+    for nm, z0, z1, base, voids in (
+            ("W_hall_w_lo", 0, RAIL, M['lav'],
+             [(L.BD_Y[0] - L.HALL_Y0, 0, L.BD_Y[1] - L.HALL_Y0, L.BD_H)]),
+            ("W_hall_w_hi", RAIL, CZ, M['cream'], [])):
+        hw = W.wall(nm, (L.HALL_X[0], L.HALL_Y0), (L.HALL_X[0], L.NW_Y),
+                    z0, z1, L.HALL_X[0] - L.HALL_WW[0], voids,
+                    mat=base, mats_extra=[M['brick']])
+        # same centroid-on-the-split-plane trap as W_hall_e's end cap
+        mlib.face_mat(hw, 1, lambda c, n: c.x < xm - 0.01)
     # -- hallway north wall (exterior) with the green closet door + dado
-    W.wall("W_hall_n_lo", (L.HALL_X[0], L.AL_Y[1]), (L.HALL_X[1], L.AL_Y[1]),
+    W.wall("W_hall_n_lo", (L.HALL_X[0], L.NW_Y), (L.HALL_X[1], L.NW_Y),
            0, 1.10, 0.30,
            [(L.CL_X[0] - L.HALL_X[0], 0, L.CL_X[1] - L.HALL_X[0], 1.10)],
            mat=M['green'])
-    W.wall("W_hall_n_hi", (L.HALL_X[0], L.AL_Y[1]), (L.HALL_X[1], L.AL_Y[1]),
+    W.wall("W_hall_n_hi", (L.HALL_X[0], L.NW_Y), (L.HALL_X[1], L.NW_Y),
            1.10, CZ, 0.30,
            [(L.CL_X[0] - L.HALL_X[0], 1.10, L.CL_X[1] - L.HALL_X[0], L.CL_H)],
            mat=M['cream'])
     # closet cavity behind the green door
-    cav = mlib.box("W_closet", L.HALL_X[0] + 0.02, L.AL_Y[1] + 0.30, 0.0,
-                   L.HALL_X[1] - 0.02, L.AL_Y[1] + 0.34, L.CL_H + 0.20, "Hall")
+    cav = mlib.box("W_closet", L.HALL_X[0] + 0.02, L.NW_Y + 0.30, 0.0,
+                   L.HALL_X[1] - 0.02, L.NW_Y + 0.34, L.CL_H + 0.20, "Hall")
     mlib.set_mat(cav, mats.paint('closet_dark', '3B342C', rough=0.8))
     for zz in (0.55, 1.05, 1.55):
-        sh = mlib.box("W_closet_shelf", L.HALL_X[0] + 0.03, L.AL_Y[1] + 0.20, zz,
-                      L.HALL_X[1] - 0.03, L.AL_Y[1] + 0.30, zz + 0.020, "Hall")
+        sh = mlib.box("W_closet_shelf", L.HALL_X[0] + 0.03, L.NW_Y + 0.20, zz,
+                      L.HALL_X[1] - 0.03, L.NW_Y + 0.30, zz + 0.020, "Hall")
         mlib.set_mat(sh, M['trim'])
-    # -- hallway east wall = alcove west wall: green dado + cream on the hall
-    #    side, lavender on the alcove side
-    he = W.wall("W_hall_e", (L.HALL_X[1], L.AL_Y[1]), (L.HALL_X[1], L.NY),
+    # -- hallway east wall.  Only the stretch north of the flat's own north wall
+    #    (NYW..NW_Y) is real: it is what closes this block against the outside.
+    #    The stretch from NY up to NYW used to be walled too, which put a short
+    #    return plus a pier between the window bay and the hallway - kitchen1.jpg
+    #    has no such wall, the doors face straight into the room.
+    he = W.wall("W_hall_e", (L.HALL_X[1], L.NW_Y), (L.HALL_X[1], L.NYW),
                 0, CZ, L.HALL_EW[1] - L.HALL_EW[0], mat=M['green'],
                 mats_extra=[M['cream'], M['lav']])
+    # The south end cap's centroid lands exactly on xe, so `c.x < xe` was a
+    # coin flip and it came out cream - a beige strip standing in the middle of
+    # a lavender wall.  Classify it by normal instead: it is seen from the
+    # living room, so it takes the lavender the alcove side has, and the
+    # lavender pass runs last so it wins.
     xe = (L.HALL_EW[0] + L.HALL_EW[1]) * 0.5
-    mlib.face_mat(he, 1, lambda c, n: c.x < xe and c.z > 1.10)
-    mlib.face_mat(he, 2, lambda c, n: c.x > xe)
-    # -- north exterior wall of the alcove: huge window, wall stops at BW_TOP
-    W.wall("W_alcove_n", (L.AL_X[0], L.AL_Y[1]), (L.AL_X[1], L.AL_Y[1]), 0, L.BW_TOP,
-           TW, [(L.BW_X[0] - L.AL_X[0], L.BW_SILL, L.BW_X[1] - L.AL_X[0], L.BW_TOP)],
+    mlib.face_mat(he, 1, lambda c, n: c.x < xe - 0.01 and c.z > 1.10)
+    mlib.face_mat(he, 2, lambda c, n: c.x > xe + 0.01 or n.y < -0.5)
+    # -- north exterior wall of the alcove: huge window, wall stops at BW_TOP.
+    #    It starts at the bathroom/hall block's east face, NOT at the bay's west
+    #    edge: that block runs north past this line, so keying this wall to
+    #    AL_X[0] buried 180 mm of it inside W_hall_e and the two z-fought.
+    AWX = L.HALL_EW[1]
+    W.wall("W_alcove_n", (AWX, L.AL_Y[1]), (L.AL_X[1], L.AL_Y[1]), 0, L.BW_TOP,
+           TW, [(L.BW_X[0] - AWX, L.BW_SILL, L.BW_X[1] - AWX, L.BW_TOP)],
            mat=M['lav'])
     # -- header over the alcove opening
-    W.wall("W_alcove_hdr", (L.AL_X[0], L.NY), (L.AL_X[1], L.NY), L.AL_Z, CZ, 0.22,
-           mat=M['cream'])
+    W.wall("W_alcove_hdr", (L.AL_X[0], L.AL_S), (L.AL_X[1], L.AL_S), L.AL_Z, CZ,
+           0.22, mat=M['cream'])
+    # -- west downstand closing the step between the alcove's 2.86 ceiling and
+    #    the main 3.26 one.  W_hall_e used to hide that step; with it gone the
+    #    gap was open to the void, which is the bright wedge that showed up
+    #    above the hallway.
+    W.wall("W_alcove_wdn", (L.AL_X[0], L.AL_S), (L.AL_X[0], L.NYW), L.AL_Z, CZ,
+           0.10, mat=M['cream'])
     # -- central wall: Rachel's doorway at the south, Monica's door at the north
     u = lambda y: L.NYW - y
     W.wall("W_east_lo", (L.EX, L.NYW), (L.EX, L.SY), 0, RAIL, L.EXW - L.EX,
            [(u(L.CD_Y[1]), 0, u(L.CD_Y[0]), L.CD_TOP),
-            (u(L.MD_Y[1]), 0, u(L.MD_Y[0]), L.MD_H)],
+            (u(L.MD_Y[1]), 0, u(L.MD_Y[0]), L.MD_TOP)],
            mat=M['lav'], mats_extra=[M['cream']])
     W.wall("W_east_hi", (L.EX, L.NYW), (L.EX, L.SY), RAIL, CZ, L.EXW - L.EX,
            mat=M['cream'])
@@ -192,55 +220,59 @@ def build():
     # ------------------------------------------------------------- ceilings
     main_poly = [(0, L.SY), (0, L.CH_A[1]), L.CH_B, (L.N_BRICK[1], L.NY),
                  (L.HALL_WW[0], L.HALL_Y0), (L.HALL_X[0], L.HALL_Y0),
-                 (L.HALL_X[0], L.AL_Y[1]), (L.HALL_X[1], L.AL_Y[1]),
-                 (L.HALL_X[1], L.NY), (L.EX, L.NY), (L.EX, L.SY)]
+                 (L.HALL_X[0], L.NW_Y), (L.HALL_X[1], L.NW_Y),
+                 (L.HALL_X[1], L.AL_S), (L.EX, L.AL_S), (L.EX, L.SY)]
     ceil = mlib.prism("C_main", main_poly, CZ, CZ + 0.10, "Shell")
     mlib.set_mat(ceil, M['ceil'])
-    alc = mlib.box("C_alcove", L.AL_X[0], L.NY, L.AL_Z, L.AL_X[1], L.RAKE_Y,
+    alc = mlib.box("C_alcove", L.AL_X[0], L.AL_S, L.AL_Z, L.AL_X[1], L.NYW,
                    L.AL_Z + 0.10, "Shell")
     mlib.set_mat(alc, M['ceil'])
 
     # ---------------------------------------------------------------- trim
-    per = [(L.EX, L.NY), (L.EX, L.SY), (0, L.SY), (0, L.CH_A[1]), L.CH_B,
+    per = [(L.EX, L.AL_S), (L.EX, L.SY), (0, L.SY), (0, L.CH_A[1]), L.CH_B,
            (L.N_BRICK[1], L.NY), (L.HALL_WW[0], L.HALL_Y0),
-           (L.HALL_X[0], L.HALL_Y0), (L.HALL_X[0], L.AL_Y[1]),
-           (L.HALL_X[1], L.AL_Y[1]), (L.HALL_X[1], L.NY), (L.EX, L.NY)]
+           (L.HALL_X[0], L.HALL_Y0), (L.HALL_X[0], L.NW_Y),
+           (L.HALL_X[1], L.NW_Y), (L.HALL_X[1], L.AL_S), (L.EX, L.AL_S)]
     W.run_molding("T_cove", per, W.CROWN_PROF, mat=M['ceil'])
     W.run_molding("T_cove_alcove",
-                  [(L.AL_X[0], L.NY), (L.AL_X[0], L.RAKE_Y)], W.ALCOVE_CROWN,
+                  [(L.AL_X[0], L.AL_S), (L.AL_X[0], L.NYW)], W.ALCOVE_CROWN,
                   mat=M['ceil'])
     W.run_molding("T_cove_alcove2",
-                  [(L.AL_X[1], L.RAKE_Y), (L.AL_X[1], L.NY)], W.ALCOVE_CROWN,
+                  [(L.AL_X[1], L.NYW), (L.AL_X[1], L.AL_S)], W.ALCOVE_CROWN,
                   mat=M['ceil'])
     W.run_molding("T_rail", [(L.EX, L.CD_Y[1] + 0.06), (L.EX, L.SY), (0, L.SY),
                              (0, L.W_PLASTER[1])], W.RAIL_PROF, mat=M['beam'])
-    W.run_molding("T_rail2", [(L.EX, L.NY), (L.EX, L.MD_Y[1] + 0.06)],
+    W.run_molding("T_rail2", [(L.EX, L.AL_S), (L.EX, L.MD_Y[1] + 0.06)],
                   W.RAIL_PROF, mat=M['beam'])
     W.run_molding("T_rail3", [(L.EX, L.MD_Y[0] - 0.06), (L.EX, L.CD_Y[1] + 0.06)],
                   W.RAIL_PROF, mat=M['beam'], cap=True)
+    # South to north, not north to south: run_molding puts the profile on the
+    # left of travel, and the other way round it was buried inside the wall
+    # (x 3.368..3.399 against a face at 3.400) so the hallway had no rail at all.
     W.run_molding("T_rail_hall",
-                  [(L.HALL_X[0], L.AL_Y[1]), (L.HALL_X[0], L.HALL_Y0)],
+                  [(L.HALL_X[0], L.HALL_Y0), (L.HALL_X[0], L.NW_Y)],
                   W.RAIL_PROF, mat=M['beam'])
     # baseboards (broken at door openings and at brickwork)
     for i, p in enumerate([
         [(L.EX, L.CD_Y[0]), (L.EX, L.SY), (0, L.SY), (0, L.FD_Y[0])],
         [(0, L.FD_Y[1]), (0, L.W_PLASTER[1])],
-        [(L.EX, L.NY), (L.EX, L.MD_Y[1])],
+        [(L.EX, L.AL_S), (L.EX, L.MD_Y[1])],
         [(L.EX, L.MD_Y[0]), (L.EX, L.CD_Y[1])],
         [(L.HALL_X[0], L.BD_Y[0]), (L.HALL_X[0], L.HALL_Y0)],
-        [(L.HALL_X[0], L.AL_Y[1]), (L.HALL_X[0], L.BD_Y[1])],
-        [(L.HALL_X[1], L.AL_Y[1]), (L.HALL_X[1], L.NY)],
-        [(L.AL_X[0], L.NY), (L.AL_X[0], L.AL_Y[1]), (L.AL_X[1], L.AL_Y[1])],
+        [(L.HALL_X[0], L.NW_Y), (L.HALL_X[0], L.BD_Y[1])],
+        # only the stretch of hallway east wall that still exists
+        [(L.HALL_X[1], L.NW_Y), (L.HALL_X[1], L.NYW)],
+        [(L.HALL_EW[1], L.NYW), (L.AL_X[1], L.NYW)],
     ]):
         W.run_molding("T_base_%d" % i, p, W.BASE_PROF, mat=M['trim'])
     # chair rail capping the green dado in the hallway
     CHAIR = [(1.078, 0.0012), (1.078, 0.0230), (1.098, 0.0265),
              (1.110, 0.0195), (1.110, 0.0012)]
-    W.run_molding("T_chair_hn1", [(L.HALL_X[0], L.AL_Y[1]), (L.CL_X[0], L.AL_Y[1])],
+    W.run_molding("T_chair_hn1", [(L.HALL_X[0], L.NW_Y), (L.CL_X[0], L.NW_Y)],
                   CHAIR, mat=M['green'])
-    W.run_molding("T_chair_hn2", [(L.CL_X[1], L.AL_Y[1]), (L.HALL_X[1], L.AL_Y[1])],
+    W.run_molding("T_chair_hn2", [(L.CL_X[1], L.NW_Y), (L.HALL_X[1], L.NW_Y)],
                   CHAIR, mat=M['green'])
-    W.run_molding("T_chair_he", [(L.HALL_X[1], L.AL_Y[1]), (L.HALL_X[1], L.NY)],
+    W.run_molding("T_chair_he", [(L.HALL_X[1], L.NW_Y), (L.HALL_X[1], L.NYW)],
                   CHAIR, mat=M['green'])
 
     # ------------------------------------------------- wall panel mouldings
@@ -271,7 +303,12 @@ def build():
     # east wall - three solid stretches: south of Rachel's opening, behind the
     # credenza (skipped: the Jouets poster lives there), and north of it
     panel_run("e0", L.SY, L.CD_Y[0], (-1, 0), L.EX, 'y')
-    panel_run("e1", L.TV_C[1] + L.CRED_HW, L.NY, (-1, 0), L.EX, 'y')
+    # Between the credenza and the alcove this wall is now broken by Monica's
+    # door, leaving a 0.95 m stretch north of it.  At the default 1.30/0.34 that
+    # solves to a 0.27 m panel and is dropped, so the run gets its own sizing -
+    # one panel, behind the console and under the sconce.
+    panel_run("e1", L.MD_WALL[0], L.MD_WALL[1], (-1, 0), L.EX, 'y',
+              want=0.60, margin=0.20)
 
     # ------------------------------------------------------- kitchen timber
     bz0, bz1 = L.BEAM_Z
@@ -298,16 +335,25 @@ def build():
     post = mlib.box("B_post", px0, by1 - 0.20, 0.0, px1, by1, bz0 + 0.002, "Shell")
     mlib.bevel(post, 0.008, 2, 45)
     mlib.set_mat(post, M['beam_v'])
-    # knee brace in the plane of the beam
-    d = 0.50
+    # 45-degree knee brace in the plane of the beam, as in kitchen1.jpg: foot on
+    # the post's south face, head mortised into the beam's underside.
+    #
+    # The profile below already leans south - from (by1-0.20, bz0-d) up to the
+    # beam - so the mirror that used to follow sent it the other way, north of
+    # the post where there is no beam at all.  All that showed of it was the
+    # wedge poking 415 mm past the beam's end into the hallway wall.
+    # The old profile's four corners were all collinear: the 0.115 offset ran
+    # along (-1,+1), the same direction as the member itself, so the section had
+    # zero area and the brace came out as a flat card with no thickness.  The
+    # offset has to be PERPENDICULAR to the run - (+1,+1)/sqrt(2) - and it goes
+    # towards the corner, so the brace's back is against the post and beam.
+    d, wsec = 0.50, 0.14
     ya, za = by1 - 0.20, bz0 - d
+    q = wsec / math.sqrt(2.0)
     br = mlib.prism_yz("B_brace",
-                       [(ya, za), (ya - 0.115, za + 0.115),
-                        (ya - 0.115 - d, za + 0.115 + d), (ya - d, za + d)],
+                       [(ya, za), (ya + q, za + q),
+                        (ya + q - d, za + q + d), (ya - d, za + d)],
                        bx0 + 0.024, bx1 - 0.024, "Shell")
-    for v in br.data.vertices:               # mirror so the brace leans south
-        v.co.y = 2 * ya - v.co.y
-    mlib.recalc_normals(br)
     mlib.bevel(br, 0.006, 2, 45)
     mlib.set_mat(br, M['beam_y'])
 

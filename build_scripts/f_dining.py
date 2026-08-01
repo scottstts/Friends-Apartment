@@ -344,35 +344,48 @@ def bentwood_chair(name, cx, cy, rot, M, cname=C, seat_h=0.455):
     # round seat
     st = mlib.revolve(name + "_seat", [(0.0, 0.0), (r - 0.012, 0.0),
                                        (r, 0.010), (r, 0.026), (r - 0.014, 0.034),
-                                       (0.0, 0.030)], 34, cname=cname)
+                                       (r - 0.070, 0.030), (0.0, 0.026)], 44,
+                      cname=cname)
     mlib.smooth_shade(st, 34)
     parts.append(st)
     mlib.translate(st, (0, 0, seat_h - 0.034))
-    # hoop back (a big circle bent up from the seat rim)
+    # Steam-bent back.  Both members were 4-sided prisms on a 24x32 rectangle,
+    # which is why they read as faceted flat straps rather than bent rod, and
+    # both simply stopped dead at seat height - the old hoop path appended a
+    # point straight below its first, so the tube kinked and finished in a flat
+    # sawn end hanging beside the seat.  Round section, and the ends curl down
+    # past the seat's rim so they read as fixed into the frame.
+    def curl(p0, sgn, drop):
+        out = []
+        for j in range(1, 7):
+            u = j / 6.0
+            out.append((p0[0] + sgn * 0.012 * u,
+                        p0[1] + 0.020 * u,
+                        p0[2] - drop * u ** 0.85))
+        return out
+
+    N = 48
     pts = []
-    n = 26
-    for i in range(n + 1):
-        t = i / n
-        a = math.pi * (1.0 - t)
-        pts.append((r * 0.93 * math.cos(a),
-                    0.10 - 0.30 * math.sin(a) ** 1.4,
-                    seat_h + 0.46 * math.sin(a) ** 0.55))
-    for i in (0, n):
-        pass
-    full = [(pts[0][0], pts[0][1], seat_h - 0.01)] + pts + \
-           [(pts[-1][0], pts[-1][1], seat_h - 0.01)]
-    hoop = mlib.tube_along(name + "_hoop", full,
-                           [(0.012, -0.016), (0.012, 0.016), (-0.012, 0.016),
-                            (-0.012, -0.016)], cname)
-    parts.append(hoop)
-    # inner scroll
+    for i in range(N + 1):
+        s = math.sin(math.pi * (1.0 - i / N))
+        pts.append((r * 0.92 * math.cos(math.pi * (1.0 - i / N)),
+                    0.088 - 0.285 * s ** 1.4,
+                    seat_h + 0.455 * s ** 0.55))
+    full = list(reversed(curl(pts[0], -1, 0.080))) + pts + curl(pts[-1], 1, 0.080)
+    parts.append(mlib.tube_along(name + "_hoop", full,
+                                 mlib.circle(0.0135, 14), cname))
+    # inner arch, the smaller loop set inside the hoop
+    N2 = 34
     inner = []
-    for i in range(19):
-        t = i / 18.0
-        a = math.pi * (1.0 - t)
-        inner.append((r * 0.55 * math.cos(a), 0.055 - 0.20 * math.sin(a) ** 1.4,
-                      seat_h + 0.11 + 0.24 * math.sin(a) ** 0.6))
-    parts.append(mlib.tube_along(name + "_in", inner, mlib.circle(0.010, 8), cname))
+    for i in range(N2 + 1):
+        s = math.sin(math.pi * (1.0 - i / N2))
+        inner.append((r * 0.56 * math.cos(math.pi * (1.0 - i / N2)),
+                      0.058 - 0.190 * s ** 1.4,
+                      seat_h + 0.058 + 0.290 * s ** 0.62))
+    inner = list(reversed(curl(inner[0], -1, 0.128))) + inner + \
+        curl(inner[-1], 1, 0.128)
+    parts.append(mlib.tube_along(name + "_in", inner, mlib.circle(0.0105, 12),
+                                 cname))
     # legs
     for k in range(4):
         a = math.tau * k / 4 + math.pi / 4
@@ -382,12 +395,12 @@ def bentwood_chair(name, cx, cy, rot, M, cname=C, seat_h=0.455):
                               (r * 0.95 * math.cos(a), r * 0.95 * math.sin(a),
                                seat_h * 0.55),
                               (r * 1.18 * math.cos(a), r * 1.18 * math.sin(a), 0.0)],
-                             mlib.circle(0.0145, 9), cname)
+                             mlib.circle(0.0145, 12), cname)
         parts.append(lg)
     ring = mlib.tube_along(name + "_ring",
                            [(r * 1.0 * math.cos(a), r * 1.0 * math.sin(a), 0.20)
-                            for a in [i * math.tau / 26 for i in range(26)]],
-                           mlib.circle(0.0095, 7), cname, close_path=True)
+                            for a in [i * math.tau / 36 for i in range(36)]],
+                           mlib.circle(0.0105, 10), cname, close_path=True)
     parts.append(ring)
     ob = mlib.join(parts, name, cname)
     mlib.smooth_shade(ob, 40)

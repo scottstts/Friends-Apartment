@@ -409,6 +409,19 @@ def _uphol_body(name, ln, dep, cname, seat_z=0.415, arm_z=0.630, back_z=0.850,
     return parts, (x0, x1, y0, y1, seat_z, arm_z, back_z, aw, backt)
 
 
+BACK_LEAN = math.radians(-6.0)
+
+
+def _back_x(x0, backt, thick, h):
+    """Local x for a back cushion so its top rear corner lands on the back
+    rail's front face.  A back cushion that does not touch the rail reads as
+    propped up on nothing, and at 12 degrees of lean its base stood 100 mm
+    proud of the rail - so the lean is gentle and the offset is derived rather
+    than guessed."""
+    return x0 + backt + thick * 0.5 * math.cos(BACK_LEAN) \
+        + h * abs(math.sin(BACK_LEAN))
+
+
 def sofa(name, cx, cy, M, ln=2.32, dep=0.90, cname=C):
     parts, g = _uphol_body(name, ln, dep, cname)
     x0, x1, y0, y1, seat_z, arm_z, back_z, aw, backt = g
@@ -422,14 +435,16 @@ def sofa(name, cx, cy, M, ln=2.32, dep=0.90, cname=C):
         # than the gap you want to read.
         w = pitch - 0.028
         yy = y0 + aw + (i + 0.5) * pitch
-        cu = mlib.cushion(name + "_sc%d" % i, dep - 0.30, w, 0.160, 0.105, cname)
-        mlib.translate(cu, (0.055, yy, seat_z))
+        cu = mlib.cushion(name + "_sc%d" % i, 0.56, w, 0.160, 0.105, cname)
+        mlib.translate(cu, (0.15, yy, seat_z))
         parts.append(cu)
-        # back cushion: plump, leaning on the rail so its back face meets the
-        # rail's front at rail height and its crown covers the top of the rail.
-        bc = mlib.cushion(name + "_bc%d" % i, 0.30, w, 0.46, 0.115, cname)
-        mlib.rot_y(bc, math.radians(-12))
-        mlib.translate(bc, (-0.039, yy, 0.500))
+        # Back cushion.  It was 0.30 thick and centred at -0.039, which left it
+        # floating 40 mm clear of the rail *and* eating half the seat: 0.90 of
+        # depth minus a 0.22 rail minus 0.30 of cushion is 0.38 of usable seat.
+        # 0.18 thick with its top corner set on the rail face gives 0.43.
+        bc = mlib.cushion(name + "_bc%d" % i, 0.18, w, 0.46, 0.115, cname)
+        mlib.rot_y(bc, BACK_LEAN)
+        mlib.translate(bc, (_back_x(x0, backt, 0.18, 0.46), yy, 0.500))
         parts.append(bc)
     ob = mlib.join(parts, name, cname)
     mlib.set_mat(ob, M['damask'])
@@ -488,24 +503,22 @@ def drape_over(name, cx, cy, ztop, w=1.2, front=0.5, back=0.3, t=0.16, cname=C,
 def armchair(name, cx, cy, rot, M, w=0.96, dep=0.94, cname=C):
     parts, g = _uphol_body(name, w, dep, cname, aw=0.175, backt=0.21)
     x0, x1, y0, y1, seat_z, arm_z, back_z, aw, backt = g
-    cu = mlib.cushion(name + "_sc", dep - 0.30, w - 2 * aw - 0.02, 0.16, 0.05, cname)
-    mlib.translate(cu, (0.055, 0.0, seat_z))
+    cu = mlib.cushion(name + "_sc", 0.58, w - 2 * aw - 0.02, 0.16, 0.05, cname)
+    mlib.translate(cu, (0.155, 0.0, seat_z))
     parts.append(cu)
-    bc = mlib.cushion(name + "_bc", 0.25, w - 2 * aw - 0.02, 0.48, 0.055, cname)
-    mlib.rot_y(bc, math.radians(-12))
-    mlib.translate(bc, (x0 + backt + 0.10, 0.0, seat_z - 0.02))
+    bc = mlib.cushion(name + "_bc", 0.18, w - 2 * aw - 0.02, 0.48, 0.055, cname)
+    mlib.rot_y(bc, BACK_LEAN)
+    mlib.translate(bc, (_back_x(x0, backt, 0.18, 0.48), 0.0, seat_z - 0.02))
     parts.append(bc)
     ob = mlib.join(parts, name, cname)
     mlib.set_mat(ob, M['damask'])
     mlib.rotate_z(ob, rot)
     mlib.translate(ob, (cx, cy, 0.0))
-    # red-and-white checked quilt folded over the back, as in the set photos
-    th = drape_over(name + "_thr", x0 + backt * 0.5, 0.0, back_z, w=0.74,
-                    front=0.34, back=0.26, t=backt * 0.5 + 0.05, cname=cname,
-                    mat=M['check'])
-    mlib.rotate_z(th, rot)
-    mlib.translate(th, (cx, cy, 0.0))
-    return [ob, th]
+    # No quilt over this chair's back.  drape_over lays a shell of the given
+    # thickness across the rail, and against a 0.21 rail it came out as a flat
+    # striped card sitting inside the upholstery rather than cloth hanging over
+    # it - the check pillows already carry that pattern where it reads.
+    return [ob]
 
 
 def slipper_chair(name, cx, cy, rot, M, w=0.63, dep=0.72, cname=C):
@@ -978,29 +991,52 @@ def crt_tv(name, cx, cy, cz, M, w=0.60, d=0.52, h=0.50, cname=C):
     return objs
 
 
-def speaker(name, cx, cy, M, w=0.24, d=0.28, h=0.44, cname=C):
+def speaker(name, cx, cy, M, w=0.32, d=0.40, h=0.70, cname=C):
+    """Floor-standing hi-fi speaker of the period: a veneered box with a
+    recessed baffle, a big woofer with a coloured surround and a small tweeter
+    above it.  It used to be a squat 0.44 m block with two flat discs stuck on
+    the front, which read as a plinth rather than a loudspeaker."""
     parts = []
+    veneer = mats.wood('wood_speaker', ('7A5028', '5A3418', '3A2008'),
+                       ring=44, warp=0.05, bump=0.28, axis='YZ')
     box = mlib.box(name + "_b", -d / 2, -w / 2, 0.0, d / 2, w / 2, h, cname)
     mlib.bevel(box, 0.006, 2, 45)
-    parts.append((box, M['bakelite']))
-    # tweeter and woofer; the woofer keeps its rubber surround, but a bright
-    # pillar-box red read as a stray disc stuck on the cabinet
-    surr = mats.paint('rubber_surround', '4A211C', rough=0.62)
-    for (zz, rr, mm) in ((h - 0.10, 0.030, M['bakelite']),
-                         (h - 0.28, 0.072, surr)):
-        ring = mlib.revolve(name + "_r", [(rr * 0.55, 0.0), (rr, 0.010),
-                                          (rr * 0.92, 0.020), (rr * 0.5, 0.014),
-                                          (0.0, 0.006)], 22, cname=cname)
-        mlib.rot_y(ring, -math.pi / 2)
-        mlib.translate(ring, (-d / 2 - 0.004, 0.0, zz))
-        mlib.smooth_shade(ring, 40)
-        parts.append((ring, mm))
-        cone = mlib.revolve(name + "_c", [(0.0, -0.022), (rr * 0.55, 0.0),
-                                          (rr * 0.62, 0.004)], 20, cname=cname)
+    parts.append((box, veneer))
+    # baffle recessed behind a shallow lip, so the drivers sit in a face rather
+    # than on one
+    bf = mlib.box(name + "_bf", -d / 2 - 0.010, -w / 2 + 0.022, 0.026,
+                  -d / 2 + 0.004, w / 2 - 0.022, h - 0.026, cname)
+    mlib.bevel(bf, 0.003, 2, 45)
+    parts.append((bf, M['bakelite']))
+    surr = mats.paint('rubber_surround', '5E2018', rough=0.62)
+    cone_m = mats.paint('driver_cone', '241E1A', rough=0.80)
+    # (centre z, outer radius, surround?) - woofer low and large, tweeter above
+    for (zz, rr, has_s) in ((h * 0.34, 0.098, True), (h * 0.76, 0.036, False)):
+        if has_s:
+            ring = mlib.revolve(name + "_r", [(rr * 0.62, 0.0), (rr, 0.012),
+                                              (rr * 1.06, 0.026),
+                                              (rr * 0.98, 0.034),
+                                              (rr * 0.60, 0.020)], 26,
+                                cname=cname)
+            mlib.rot_y(ring, -math.pi / 2)
+            mlib.translate(ring, (-d / 2 - 0.006, 0.0, zz))
+            mlib.smooth_shade(ring, 40)
+            parts.append((ring, surr))
+        # dished cone with a dust cap at its centre
+        cone = mlib.revolve(name + "_c", [(0.0, -0.030 * (rr / 0.098)),
+                                          (rr * 0.28, -0.022 * (rr / 0.098)),
+                                          (rr * 0.62, 0.002),
+                                          (rr * 0.70, 0.010)], 26, cname=cname)
         mlib.rot_y(cone, -math.pi / 2)
-        mlib.translate(cone, (-d / 2 - 0.004, 0.0, zz))
+        mlib.translate(cone, (-d / 2 - 0.006, 0.0, zz))
         mlib.smooth_shade(cone, 40)
-        parts.append((cone, M['bakelite']))
+        parts.append((cone, cone_m))
+        cap = mlib.revolve(name + "_cap", [(0.0, 0.0), (rr * 0.24, -0.004),
+                                           (rr * 0.26, -0.018)], 20, cname=cname)
+        mlib.rot_y(cap, -math.pi / 2)
+        mlib.translate(cap, (-d / 2 - 0.006 - 0.030 * (rr / 0.098), 0.0, zz))
+        mlib.smooth_shade(cap, 40)
+        parts.append((cap, M['bakelite']))
     objs = []
     for ob, mm in parts:
         mlib.set_mat(ob, mm)
@@ -1082,32 +1118,126 @@ def window_seat(name, M, cname=C):
 
 
 def console_table(name, M, cname=C):
+    """Long sofa table under the window.
+
+    Rebuilt: it used to be a 40 mm slab on four legs that started inside the
+    top's footprint and splayed out past it, tied by one thin bar floating at
+    mid height between them, touching nothing.  Now it is a proper frame -
+    lipped top, four rails set back from the edge, square tapered legs standing
+    at the frame's corners, and an H-stretcher whose members actually meet."""
     cx = (L.BW_X[0] + L.BW_X[1]) * 0.5
     cy = L.AL_Y[1] - L.SEAT_D - 0.30
-    w, d, h = 1.35, 0.40, 0.715
+    w, d, h = 1.35, 0.42, 0.715
     parts = []
-    top = mlib.box(name + "_top", -w / 2, -d / 2, h - 0.040, w / 2, d / 2, h, cname)
-    mlib.bevel(top, 0.005, 3, 40)
+    top = mlib.box(name + "_top", -w / 2, -d / 2, h - 0.028, w / 2, d / 2, h,
+                   cname)
+    mlib.bevel(top, 0.006, 3, 42)
     parts.append((top, M['limed']))
-    ap = mlib.box(name + "_ap", -w / 2 + 0.05, -d / 2 + 0.035, h - 0.11,
-                  w / 2 - 0.05, d / 2 - 0.035, h - 0.040, cname)
-    mlib.bevel(ap, 0.004, 2, 45)
-    parts.append((ap, M['limed']))
+    lip = mlib.box(name + "_lip", -w / 2 + 0.012, -d / 2 + 0.012, h - 0.046,
+                   w / 2 - 0.012, d / 2 - 0.012, h - 0.028, cname)
+    mlib.bevel(lip, 0.004, 2, 45)
+    parts.append((lip, M['limed']))
+    ix, iy, RT = w / 2 - 0.058, d / 2 - 0.040, 0.026
+    for nm, x0, y0, x1, y1 in (
+            (name + "_rf", -ix, iy - RT, ix, iy),
+            (name + "_rb", -ix, -iy, ix, -iy + RT),
+            (name + "_rl", -ix, -iy, -ix + RT, iy),
+            (name + "_rr", ix - RT, -iy, ix, iy)):
+        rail = mlib.box(nm, x0, y0, h - 0.148, x1, y1, h - 0.046, cname)
+        mlib.bevel(rail, 0.003, 2, 45)
+        parts.append((rail, M['limed_y']))
     for (sx, sy) in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
-        pts = [(sx * (w / 2 - 0.06), sy * (d / 2 - 0.05), h - 0.10),
-               (sx * (w / 2 - 0.02), sy * (d / 2 + 0.02), 0.0)]
+        pts = [(sx * (ix - RT * 0.5), sy * (iy - RT * 0.5), h - 0.046),
+               (sx * (ix - 0.034), sy * (iy - 0.030), 0.0)]
         lg = mlib.tube_along(name + "_lg", pts,
-                             mlib.rounded_rect(0.048, 0.038, 0.006, 2), cname)
+                             mlib.rounded_rect(0.048, 0.044, 0.005, 2), cname)
         parts.append((lg, M['limed_v']))
-    st = mlib.box(name + "_st", -w / 2 + 0.02, -0.014, 0.175, w / 2 - 0.02,
-                  0.014, 0.205, cname)
-    parts.append((st, M['limed']))
+    # H-stretcher: a bar across each end between that end's pair of legs, joined
+    # by one running the length between their midpoints
+    SZ0, SZ1 = 0.188, 0.214
+    for sx in (-1, 1):
+        a, b = sorted((sx * (ix - 0.048), sx * (ix - 0.014)))
+        e = mlib.box(name + "_se", a, -(iy - 0.026), SZ0, b, iy - 0.026, SZ1,
+                     cname)
+        mlib.bevel(e, 0.003, 2, 45)
+        parts.append((e, M['limed_y']))
+    lb = mlib.box(name + "_sl", -(ix - 0.030), -0.017, SZ0 + 0.002,
+                  ix - 0.030, 0.017, SZ1 - 0.002, cname)
+    mlib.bevel(lb, 0.003, 2, 45)
+    parts.append((lb, M['limed']))
     objs = []
     for ob, mm in parts:
         mlib.set_mat(ob, mm)
         mlib.translate(ob, (cx, cy, 0.0))
         objs.append(ob)
     return objs
+
+
+def door_wall(name, M, cname=C):
+    """The stretch of central wall between Monica's door and the alcove.
+
+    This is the piece the build was missing entirely.  In living_room.jpeg the
+    window bay does not run into the bedroom door: between them is a stand of
+    wall carrying a brass sconce over a hung picture, with a low console under
+    it and framed photographs standing on the console.  Without it the door sits
+    in the corner of the flat behind the drape, which is what it had been doing.
+    """
+    cy = (L.MD_WALL[0] + L.MD_WALL[1]) * 0.5
+    w, d, h = 0.78, 0.36, 0.725          # w runs along Y, the console's length
+    cx = L.EX - d / 2 - 0.012
+    parts = []
+    # Top: a slab with a moulded lip, overhanging the frame on all four sides.
+    # The first attempt was a plain box on four splayed sticks - no lip, no
+    # frame, no stretcher - which is why it read as a trestle rather than a
+    # piece of furniture.
+    top = mlib.box(name + "_top", -d / 2, -w / 2, h - 0.026, d / 2, w / 2, h,
+                   cname)
+    mlib.bevel(top, 0.006, 3, 42)
+    parts.append((top, M['limed_y']))
+    lip = mlib.box(name + "_lip", -d / 2 + 0.010, -w / 2 + 0.010, h - 0.040,
+                   d / 2 - 0.010, w / 2 - 0.010, h - 0.026, cname)
+    mlib.bevel(lip, 0.004, 2, 45)
+    parts.append((lip, M['limed_y']))
+    # Frame: four rails set back from the top's edge, with a shaped lower edge
+    # on the long faces so the apron has a profile instead of a flat band.
+    ix, iy = d / 2 - 0.030, w / 2 - 0.030
+    for nm, a, b in ((name + "_rf", (ix - 0.022, -iy), (ix, iy)),
+                     (name + "_rb", (-ix, -iy), (-ix + 0.022, iy)),
+                     (name + "_rl", (-ix, -iy), (ix, -iy + 0.022)),
+                     (name + "_rr", (-ix, iy - 0.022), (ix, iy))):
+        rail = mlib.box(nm, a[0], a[1], h - 0.155, b[0], b[1], h - 0.040, cname)
+        mlib.bevel(rail, 0.003, 2, 45)
+        parts.append((rail, M['limed_y']))
+    # Legs: square, tapered, standing at the frame's corners - not splayed.
+    for (sx, sy) in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
+        pts = [(sx * (ix - 0.022), sy * (iy - 0.022), h - 0.040),
+               (sx * (ix - 0.030), sy * (iy - 0.030), 0.0)]
+        lg = mlib.tube_along(name + "_lg", pts,
+                             mlib.rounded_rect(0.044, 0.044, 0.004, 2), cname)
+        parts.append((lg, M['limed_v']))
+    # Stretcher shelf low between the legs, as the crop shows under the console
+    sh = mlib.box(name + "_sh", -ix + 0.030, -iy + 0.034, 0.175,
+                  ix - 0.030, iy - 0.034, 0.196, cname)
+    mlib.bevel(sh, 0.004, 2, 45)
+    parts.append((sh, M['limed_y']))
+    for ob, mm in parts:
+        mlib.set_mat(ob, mm)
+        mlib.translate(ob, (cx, cy, 0.0))
+    gilt = mats.get('paint_gilt') or mats.paint('paint_gilt', 'C9A24A',
+                                                rough=0.30, coat=0.4)
+    # the hung picture, then the pair of photographs standing on the console
+    P.framed(name + "_art", 0.34, 0.42, (L.EX - 0.028, cy, 1.40), (-1, 0), cname,
+             framemat=gilt, mat_w=0.055,
+             artmat=mats.botanical('art_doorwall', normal=(-1, 0), seed=27,
+                                   ground='E6DEC2', stem='4A5C34',
+                                   leafc=('3F5730', '738650'),
+                                   bloom=('9C6A78', 'DCC0C6')))
+    # No standing photographs on the top.  P.framed builds a wall-hung frame, so
+    # standing two of them on the console only ever put their backs through the
+    # wall and their bottom rails into the timber - the hung picture above
+    # carries this wall on its own.
+    sconce(name + "_sc", (L.EX - 0.020, cy, 1.86), (-1, 0), M, cname=cname,
+           energy=14.0)
 
 
 # ----------------------------------------------------------------------- lamps
@@ -1303,34 +1433,46 @@ def text_mesh(name, body, size, cname=C, bold=False, extrude=0.0006,
 
 
 def jouets_poster(name, M, cname=C):
-    w, h = 0.94, 0.68
-    cz = 1.90
+    w, h = 1.24, 0.74
+    cz = 1.81
+    # Everything printed on the sheet below was laid out in absolute metres for
+    # a 1.28 m poster, so resizing the sheet left the artwork stranded at its
+    # old size in the middle of it.  k carries the whole layout with the sheet.
+    k = w / 1.28
     gold = mats.paint('paint_poster_frame', 'C9A24A', rough=0.30, coat=0.45)
-    parts = P.framed(name, w, h, (L.EX - 0.028, L.TV_C[1], cz), (-1, 0), cname,
+    parts = P.framed(name, w, h, (L.EX - 0.028, L.TV_SET_Y, cz), (-1, 0), cname,
                      framemat=gold, artmat=M['poster'], mat_w=0.0, fw=0.030,
                      fd=0.024)
     red = mats.paint('ink_red', '9A1B1E', rough=0.55, coat=0.0)
     dark = mats.paint('ink_dark', '2A211C', rough=0.6, coat=0.0)
     txt = []
-    txt.append(text_mesh(name + "_t1", "AUX BUTTES CHAUMONT", 0.072, cname,
-                         mat=red, width=0.92))
-    mlib.translate(txt[-1], (0.0, 0.0, h * 0.34))
-    txt.append(text_mesh(name + "_t2", "Jouets", 0.20, cname, mat=red, width=1.0))
-    mlib.translate(txt[-1], (0.10, 0.0, h * 0.04))
-    txt.append(text_mesh(name + "_t3", "ET  OBJETS  POUR  ETRENNES", 0.042,
-                         cname, mat=dark, width=0.9))
-    mlib.translate(txt[-1], (0.13, 0.0, -h * 0.20))
-    txt.append(text_mesh(name + "_t4", "MAISON  DU  PROGRES", 0.030, cname,
-                         mat=dark, width=0.9))
-    mlib.translate(txt[-1], (0.13, 0.0, -h * 0.33))
+
+    def put(ob, dx, dz):
+        """text_mesh anchors its lines at a corner, not on their own centre, so
+        every line used to sit at whatever x its own letter-count put it - which
+        is why the top line ran off the sheet.  Measure each line and place it
+        deliberately: dx is where its CENTRE lands."""
+        xs = [v.co.x for v in ob.data.vertices]
+        mlib.translate(ob, (dx - (min(xs) + max(xs)) * 0.5, 0.0, dz))
+        return ob
+
+    txt.append(put(text_mesh(name + "_t1", "AUX BUTTES CHAUMONT", 0.066 * k,
+                             cname, mat=red, width=0.92), 0.0, h * 0.34))
+    txt.append(put(text_mesh(name + "_t2", "Jouets", 0.20 * k, cname, mat=red,
+                             width=1.0), 0.12 * k, h * 0.02))
+    txt.append(put(text_mesh(name + "_t3", "ET  OBJETS  POUR  ETRENNES",
+                             0.042 * k, cname, mat=dark, width=0.9),
+                   0.15 * k, -h * 0.22))
+    txt.append(put(text_mesh(name + "_t4", "MAISON  DU  PROGRES", 0.030 * k,
+                             cname, mat=dark, width=0.9), 0.15 * k, -h * 0.35))
     # three harlequin figures printed bottom-left: skirt, torso, head, hat
     figs = []
     rng = random.Random(11)
     cols = [mats.paint('ink_fig_a', 'C43A2C', rough=0.58),
             mats.paint('ink_fig_b', 'D8A32A', rough=0.58),
             mats.paint('ink_fig_c', '3C4C74', rough=0.58)]
-    for i, (bx, sc) in enumerate(((-w * 0.34, 1.00), (-w * 0.24, 0.86),
-                                  (-w * 0.14, 0.94))):
+    for i, (bx, sc) in enumerate(((-w * 0.29, 1.00 * k), (-w * 0.20, 0.86 * k),
+                                  (-w * 0.11, 0.94 * k))):
         bz = -h * 0.20 + rng.uniform(-0.01, 0.02)
         m2 = cols[i]
         skirt_p = [(bx - 0.042 * sc, bz), (bx + 0.042 * sc, bz),
@@ -1355,13 +1497,17 @@ def jouets_poster(name, M, cname=C):
         figs.append(hd)
     for ob in txt + figs:
         mlib.rotate_z(ob, -math.pi / 2)
-        mlib.translate(ob, (L.EX - 0.055, L.TV_C[1], cz))
+        # TV_SET_Y, same as the sheet - this line still said TV_C[1] after the
+        # sheet moved off the cabinet's centre, so the whole printed layout sat
+        # 0.26 m to one side of the paper it belongs on.
+        mlib.translate(ob, (L.EX - 0.055, L.TV_SET_Y, cz))
     return parts
 
 
 def carved_crest(name, M, cname=C):
-    """Carved wooden pediment above the poster."""
-    w, h = 0.72, 0.20
+    """Carved wooden pediment above the poster.  Well narrower than the poster,
+    and standing clear of its top edge rather than sitting on it."""
+    w, h = 0.70, 0.16
     pts = [(-w / 2, 0.0)]
     n = 26
     for i in range(n + 1):
@@ -1378,7 +1524,8 @@ def carved_crest(name, M, cname=C):
                                ring=26, warp=0.05, distort=0.5, bump=0.4,
                                axis='YZ'))
     mlib.rotate_z(ob, math.pi / 2)
-    mlib.translate(ob, (L.EX - 0.030, L.TV_C[1], 2.42))
+    # tucked up just under the picture rail at 2.73, not sitting on the poster
+    mlib.translate(ob, (L.EX - 0.030, L.TV_SET_Y, 2.55))
     return ob
 
 
@@ -1386,9 +1533,9 @@ def carved_crest(name, M, cname=C):
 def build():
     M = mk_mats()
     rug("LR_rug", M)
-    sofa("LR_sofa", L.SOFA_C[0], L.SOFA_C[1], M)
+    sofa("LR_sofa", L.SOFA_C[0], L.SOFA_C[1], M, ln=L.SOFA_L)
     armchair("LR_armchair", L.CHAIR_ARM_WIN[0], L.CHAIR_ARM_WIN[1],
-             math.radians(-96), M)
+             math.radians(-90), M)
     # Red-and-white checked pillows on that armchair, as in the set photo -
     # they were a pale sage floral, which nothing in the references shows.
     for i, dy in enumerate((-0.16, 0.16)):
@@ -1396,7 +1543,7 @@ def build():
         mlib.rot_y(ck, math.radians(-20))
         mlib.set_mat(ck, M['check'])
         mlib.translate(ck, (0.16, dy, 0.560))
-        mlib.rotate_z(ck, math.radians(-96))
+        mlib.rotate_z(ck, math.radians(-90))
         mlib.translate(ck, (L.CHAIR_ARM_WIN[0], L.CHAIR_ARM_WIN[1], 0.0))
     # Cast-iron radiator.  It used to sit under the big window, entirely buried
     # inside the window seat's carcass; on the set that whole run is bench, so
@@ -1425,7 +1572,7 @@ def build():
     # the ottoman is that chair's footstool: squared up in front of it
     ofx, ofy = L.slipper_front(0.74)
     ottoman("LR_ottoman", ofx, ofy, math.radians(L.SLIPPER_ROT), M)
-    coffee_table("LR_coffee", L.COFFEE_C[0], L.COFFEE_C[1], M)
+    coffee_table("LR_coffee", L.COFFEE_C[0], L.COFFEE_C[1], M, d=L.COFFEE_D)
     glass_table("LR_glasstable", L.GLASS_T[0], L.GLASS_T[1], M)
     # The room's key light.  No set photo can confirm this - those sets were
     # built open to the studio roof and lit from the grid, which is why the
@@ -1436,10 +1583,16 @@ def build():
     ceiling_light("LR_ceiling", L.CHANDELIER[0], L.CHANDELIER[1], M,
                   energy=350.0, kelvin=5500.0)
     credenza("LR_credenza", M)
-    crt_tv("LR_tv", 8.27, L.TV_C[1], 0.90, M)   # back vents clear of the wall
-    speaker("LR_speaker", 7.98, L.TV_C[1] - L.CRED_HW - 0.18, M)
+    # Scaled up with the sideboard it stands on, and set towards its south end -
+    # in the crop the set is right of centre, with the vase, the pair of bronze
+    # figures and the fern filling the longer stretch to its left.
+    crt_tv("LR_tv", 8.23, L.TV_SET_Y, 0.90, M, w=0.80, d=0.62, h=0.64)
+    # Tucked in beside the sideboard with its face on the same line, not standing
+    # 215 mm proud of it out into the room.  8.045 is the sideboard's front.
+    speaker("LR_speaker", 8.045 + 0.20, L.TV_C[1] - L.CRED_HW - 0.19, M)
     window_seat("LR_seat", M)
     console_table("LR_console", M)
+    door_wall("LR_doorwall", M)
     jouets_poster("LR_poster", M)
     carved_crest("LR_crest", M)
     # The pair of gilt-framed botanicals on the wall south of Rachel's doorway.
@@ -1459,28 +1612,33 @@ def build():
     # lamps
     table_lamp("LR_lamp1", (L.BW_X[0] + L.BW_X[1]) * 0.5 + 0.46,
                L.AL_Y[1] - L.SEAT_D - 0.30, 0.715, M, energy=24.0)
-    # clear of the window seat's carcass, in the return by the central wall
-    floor_lamp("LR_floorlamp", L.AL_X[1] - 0.25, L.AL_Y[1] - 0.85, M, energy=30.0)
-    sconce("LR_sconce", (L.HALL_X[1] + 0.185, 4.30, 1.72), (0, -1), M)
-    # drapes at the alcove opening: two panels + swag valance
-    for k, (a, b2) in enumerate(((L.AL_X[0] + 0.04, L.AL_X[0] + 0.62),
-                                 (L.AL_X[1] - 0.62, L.AL_X[1] - 0.04))):
-        # five folds across 580 mm is a 116 mm pitch, about what a pinch-pleat
-        # heading gives; at seven the folds were narrower than they were deep
+    # No floor lamp in the bay's east return.  It only ever existed to put
+    # something in the strip behind the drapes, and that strip is now wall in
+    # front of them, carrying the sconce over the console instead.
+    # On the hallway's east wall, facing back down the hall.  It used to hang at
+    # (4.625, 4.30) facing south - which was 320 mm clear of any wall even before
+    # the short return was taken out, so it was lighting the hall from mid-air.
+    sconce("LR_sconce", (L.HALL_X[0] + 0.020, L.NW_Y - 0.50, 1.86), (1, 0), M)
+    # Drapes at the bay, now hung close to the glass rather than 1.42 m in front
+    # of it.  The panels sit OUTBOARD of the window seat (x 4.80..8.08) instead
+    # of overlapping its ends - at this rod line their lower folds would
+    # otherwise hang straight through the bench.
+    for k, (a, b2) in enumerate(((L.AL_X[0] + 0.02, L.BW_X[0] - 0.12),
+                                 (L.BW_X[1] + 0.12, L.AL_X[1] - 0.03))):
         dp = P.curtain_panel("LR_drape%d" % k, a, b2, L.AL_Z - 0.06, 0.004,
-                             depth=0.16, folds=5, cname=C, mat=M['drape'],
+                             depth=0.14, folds=4, cname=C, mat=M['drape'],
                              gather=0.5, flare=1.35, seed=11 + k, hem=0.016,
                              fullness=2.4)
-        mlib.translate(dp, (0, L.NY + 0.10, 0))
+        mlib.translate(dp, (0, L.AL_S + 0.13, 0))
     sw = P.swag("LR_valance", L.AL_X[0] + 0.30, L.AL_X[1] - 0.30, L.AL_Z - 0.04,
                 sag=0.22, depth=0.13, folds=8, cname=C, mat=M['drape'])
-    mlib.translate(sw, (0, L.NY + 0.08, 0))
+    mlib.translate(sw, (0, L.AL_S + 0.11, 0))
     # curtain rod
     rod = mlib.revolve("LR_rod", [(0.0, 0.0), (0.016, 0.0), (0.016, L.AL_X[1] -
                                                              L.AL_X[0]),
                                   (0.0, L.AL_X[1] - L.AL_X[0])], 14, cname=C)
     mlib.rot_y(rod, math.pi / 2)
-    mlib.translate(rod, (L.AL_X[0], L.NY + 0.13, L.AL_Z - 0.02))
+    mlib.translate(rod, (L.AL_X[0], L.AL_S + 0.16, L.AL_Z - 0.02))
     mlib.smooth_shade(rod, 34)
     mlib.set_mat(rod, mats.wood('wood_rod', ('5A3418', '3A1E0A', '221004'),
                                 ring=60, warp=0.03, bump=0.2, axis='YZ'))
@@ -1489,10 +1647,21 @@ def build():
     # not a tabletop fern on the floor.
     # `r` and `scale` multiply, and the crown must sit exactly one pot-height up
     # (r * 0.62) or the pot hangs in the air - which it had been doing all along.
-    P.fern("LR_fern", (7.86, L.TV_C[1] + L.CRED_HW + 0.30, 0.55 * 0.62), 0.55,
-           34, 3, C, True, M['leaf'], M['terra'])
-    P.trailing_plant("LR_pothos", (7.98, L.TV_C[1] - L.CRED_HW - 0.18, 0.52), 12, 5,
-                     C, M['leaf'], M['wicker'], 0.10)
+    # It stands in the gap between the sideboard's north end and Monica's door,
+    # fronds lapping over the sideboard exactly as in the crop - but the pot has
+    # to clear the carcass in x, and at r=0.55 the fronds reached 0.20 into the
+    # door void, so it is sized to the gap it actually has.
+    # ON the sideboard at its north end, beside the vase - not standing on the
+    # floor.  Sized so its fronds spill over that end without reaching through
+    # the wall behind: at r = 0.32 they span 0.76 m, and the cabinet's face is
+    # only 0.52 m off the plaster.
+    P.fern("LR_fern", (8.12, L.TV_C[1] + 1.02, 0.900 + 0.32 * 0.62), 0.32,
+           30, 3, C, True, M['leaf'], M['terra'])
+    # Standing ON the speaker, not on the floor beside it.  trailing_plant's z
+    # is the pot's RIM, not its base, so the speaker's 0.66 top plus the pot's
+    # own 0.124 height is what puts it down on the cabinet.
+    P.trailing_plant("LR_pothos", (8.245, L.TV_C[1] - L.CRED_HW - 0.19, 0.824),
+                     14, 6, C, M['leaf'], M['wicker'], 0.13)
     # Credenza-top dressing.  The set photo has one thing on this top beside the
     # television: a tall vase of yellow blooms at the far end.  The two little
     # bronze figures that stood here are in none of the references and read as

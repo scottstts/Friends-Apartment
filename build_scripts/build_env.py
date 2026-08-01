@@ -110,22 +110,28 @@ def build(M=None):
     m_steel = mats.metal('metal_dark_ext', '2E2C2A', rough=0.5, bump=0.15)
 
     # brick veneer on the outside of the alcove north wall
+    # starts at the hall block's east face, not at the bay's west edge - the bay
+    # now runs on past that block, whose own north wall stands further out
+    VX = L.HALL_EW[1]
     ven = mlib.panel_with_holes(
-        "EXT_veneer", L.AL_X[1] - L.AL_X[0], L.BW_TOP, 0.03,
-        [(L.BW_X[0] - L.AL_X[0], L.BW_SILL, L.BW_X[1] - L.AL_X[0], L.BW_TOP)], C)
-    ven.data.transform(Matrix(((1, 0, 0, L.AL_X[0]), (0, 1, 0, L.AL_Y[1] + L.TW + 0.002),
+        "EXT_veneer", L.AL_X[1] - VX, L.BW_TOP, 0.03,
+        [(L.BW_X[0] - VX, L.BW_SILL, L.BW_X[1] - VX, L.BW_TOP)], C)
+    ven.data.transform(Matrix(((1, 0, 0, VX), (0, 1, 0, L.AL_Y[1] + L.TW + 0.002),
                                (0, 0, 1, 0), (0, 0, 0, 1))))
     mlib.recalc_normals(ven)
     mlib.set_mat(ven, mb)
 
     # narrow setback ledge outside the window with a low masonry parapet, kept
     # close so it reads as a band across the bottom of the glass
-    ter = mlib.box("EXT_terrace", 2.0, L.AL_Y[1] + L.TW, -0.10, 13.0, 7.00, 0.02, C)
+    # The ledge starts east of the bathroom/hall block, which now projects north
+    # past this line - at x = 2.0 the terrace and parapet ran straight through it.
+    TX = L.HALL_EW[1] + 0.13
+    ter = mlib.box("EXT_terrace", TX, L.AL_Y[1] + L.TW, -0.10, 13.0, 7.00, 0.02, C)
     mlib.set_mat(ter, m_conc)
-    par = mlib.box("EXT_parapet", 2.0, 6.80, -0.05, 13.0, 7.00, 0.88, C)
+    par = mlib.box("EXT_parapet", TX, 6.80, -0.05, 13.0, 7.00, 0.88, C)
     mlib.bevel(par, 0.02, 2, 40)
     mlib.set_mat(par, m_conc)
-    cap = mlib.box("EXT_parapet_cap", 1.96, 6.76, 0.88, 13.04, 7.04, 0.945, C)
+    cap = mlib.box("EXT_parapet_cap", TX - 0.04, 6.76, 0.88, 13.04, 7.04, 0.945, C)
     mlib.bevel(cap, 0.012, 2, 40)
     mlib.set_mat(cap, m_conc)
     # fire-escape rail rising past the window
