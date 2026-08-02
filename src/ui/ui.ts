@@ -1,20 +1,24 @@
 /** Intro, pause and unsupported-browser veils.  Clean by rule: no explanation
  * or description text, no in-game UI - the whole window is the scene.
  *
- * The design language is the apartment's own front door: the whole intro is
- * the purple door seen from the hallway - brass "20", the scrolled yellow
- * peephole frame drawn in SVG, an episode-title lockup and the six logo dots.
- * While the scene builds, the lens is dark and the dots pulse; when the game
- * is ready the light comes on behind the peephole.  Entering swings the door
- * open onto the live canvas.  Pause is the ornate doorbell over the frozen
- * frame; the unsupported-browser page is the same door with the lens unlit. */
+ * The design language is the building's own hallway: the intro is the two
+ * front doors seen from the landing, plain purple panels carrying only their
+ * brass numbers - Chandler and Joey's 19 on the left, Monica's 20 on the
+ * right - below the episode-title lockup and the six logo dots.  While the
+ * scene builds the dots pulse; when the game is ready the dots settle, a
+ * band of hallway light passes over each door and the underlight warms
+ * beneath 20.  A hovered door leans forward; choosing 20 swings it open and
+ * the hallway falls through onto the live canvas (19 waits, dim, until its
+ * apartment exists).  Walking back to the front door in game returns to this
+ * landing.  Pause is the ornate doorbell over the frozen frame; the
+ * unsupported-browser page hangs the peephole-frame art over the door. */
 
 export interface UiHooks {
   onEnter: () => void
   onResume: () => void
 }
 
-/* Door-open duration; the CSS transition below is timed to match. */
+/* Door-open duration; the CSS transitions below are timed to match. */
 const OPEN_MS = 1300
 const OPEN_MS_REDUCED = 520
 
@@ -34,18 +38,18 @@ canvas { display: block; }
   -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
   color: #f1e9d4;
 }
-.veil.intro { perspective: clamp(1100px, 120vmax, 2400px); perspective-origin: 30% 50%; }
+/* One knob sizes the whole landing: door height, and everything scales off it. */
+.veil.intro { --dh: min(58vh, 75vw); }
 .veil.pause { z-index: 12; }
 .veil.fatal { z-index: 30; }
 
-/* ---- the door ---- */
+/* ---- door material (the hallway pair and the fatal page) ---- */
 .door {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
   background:
     linear-gradient(104deg, rgba(255,255,255,0) 40%, rgba(255,255,255,0.05) 49%, rgba(255,255,255,0.015) 55%, rgba(255,255,255,0) 64%),
     radial-gradient(120% 118% at 50% 32%, #6f5a9e 0%, #5b4884 40%, #46356b 72%, #342853 100%);
-  transform-origin: left center;
 }
 .grain { position: absolute; inset: 0; pointer-events: none; background-image: ${GRAIN}; background-size: 180px; }
 .molding {
@@ -60,17 +64,14 @@ canvas { display: block; }
   border: 1px solid rgba(240,232,255,0.045); border-radius: 2px;
 }
 .doornum {
-  position: absolute; top: clamp(28px, 9vh, 120px); left: 0; right: 0; text-align: center;
-  font-size: clamp(2.4rem, 8vmin, 10rem); letter-spacing: 0.2em; text-indent: 0.2em;
+  position: absolute; top: calc(var(--dh) * 0.055); left: 0; right: 0; text-align: center;
+  font-size: calc(var(--dh) * 0.125); letter-spacing: 0.2em; text-indent: 0.2em;
   background: linear-gradient(#f0d489, #b9903c 78%, #8d6a24);
   -webkit-background-clip: text; background-clip: text; color: transparent;
   filter: drop-shadow(0 0.03em 0.035em rgba(18,10,36,0.7)) drop-shadow(0 -0.012em 0 rgba(255,240,200,0.18));
 }
-/* The unsupported-browser page has no title stack, so the numerals take the
- * open wall above the frame at full plate size. */
-.fatal .doornum { top: clamp(40px, 17vh, 300px); font-size: clamp(3.2rem, 13.5vmin, 16rem); }
 .underlight {
-  position: absolute; left: 0; right: 0; bottom: 0; height: 12vh; pointer-events: none;
+  position: absolute; left: 0; right: 0; bottom: 0; height: calc(var(--dh) * 0.1); pointer-events: none;
   background: radial-gradient(58% 130% at 50% 102%, rgba(255,206,120,0.28), rgba(255,206,120,0) 70%);
   opacity: 0.45; transition: opacity 1.4s ease;
 }
@@ -81,23 +82,62 @@ canvas { display: block; }
   transition: opacity 1s ease;
 }
 
-/* ---- centre column ---- */
+/* ---- the landing: title lockup over the two front doors ---- */
+.hall {
+  position: absolute; inset: 0; padding: 0 24px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: calc(var(--dh) * 0.085);
+  background: radial-gradient(95% 72% at 50% 30%, #2b2152 0%, #1c1537 55%, #110c24 100%);
+  transform-origin: calc(50% + var(--dh) * 0.375) 58%;
+  transition: transform 1.15s cubic-bezier(0.55, 0.06, 0.28, 0.99), opacity 0.42s ease 0.8s;
+  will-change: transform;
+}
+.doors { position: relative; display: flex; gap: calc(var(--dh) * 0.3); }
+.doorway { position: relative; width: calc(var(--dh) * 0.45); height: var(--dh); perspective: 1500px; }
+.doorway.left { perspective-origin: 130% 50%; }
+.doorway.right { perspective-origin: -30% 50%; }
+.intro .door {
+  border-radius: 4px; overflow: hidden;
+  box-shadow: 0 calc(var(--dh) * 0.045) calc(var(--dh) * 0.09) rgba(8,4,18,0.55), 0 2px 8px rgba(8,4,18,0.5);
+}
+.intro .molding { inset: calc(var(--dh) * 0.032); }
+/* Doors face each other across the hall, receding towards its centre. */
+.intro .door { transition: transform 0.5s cubic-bezier(0.22, 0.61, 0.36, 1); }
+.doorway.left .door { transform-origin: right center; transform: rotateY(13deg); }
+.doorway.right .door { transform-origin: left center; transform: rotateY(-13deg); will-change: transform; }
+/* Nobody home across the hall yet. */
+.door.d19 { filter: brightness(0.88) saturate(0.92); }
+.d20 { outline: none; }
+/* Ready: the hallway light passes over each door once. */
+.intro .door::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  background: linear-gradient(115deg, rgba(255,244,214,0) 32%, rgba(255,244,214,0.13) 46%, rgba(255,244,214,0.04) 53%, rgba(255,244,214,0) 64%);
+  transform: translateX(-135%);
+}
+.intro.ready .door::after { animation: sheen 1.6s cubic-bezier(0.3, 0, 0.25, 1) 0.15s both; }
+.intro.ready .doorway.right .door::after { animation-delay: 0.35s; }
+@keyframes sheen {
+  0% { transform: translateX(-135%); opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { transform: translateX(135%); opacity: 0; }
+}
+
+/* ---- centre column (fatal page) ---- */
 .stack {
   position: relative; display: flex; flex-direction: column; align-items: center;
   text-align: center; gap: clamp(18px, 4.2vh, 44px); padding: 0 24px;
   transform: translateY(1.2vh); isolation: isolate;
 }
-.emblem { position: relative; z-index: 1; transition: filter 0.45s ease; }
-.emblem svg { display: block; overflow: visible; height: clamp(190px, 37vmin, 340px); width: auto; }
-.titles { position: relative; z-index: 0; }
-.fatal .emblem svg { height: clamp(160px, 30vmin, 270px); }
-.intro.ready:hover .emblem, .intro.ready:focus-visible .emblem { filter: brightness(1.07); }
+/* decoration.png's art rides high on its square canvas; the negative margins
+ * make the stack hug the visible frame. */
+.fatal .emblem {
+  --fh: clamp(270px, 50vmin, 455px);
+  display: block; height: var(--fh); width: auto;
+  margin: calc(var(--fh) * -0.08) 0 calc(var(--fh) * -0.31);
+}
 
-.lens-glow, .lens-halo { opacity: 0; transition: opacity 1.2s ease 0.1s; }
-.ready .lens-glow { opacity: 0.95; }
-.ready .lens-halo { opacity: 0.55; animation: breathe 4.4s ease-in-out 1.4s infinite; }
-@keyframes breathe { 0%, 100% { opacity: 0.45; } 50% { opacity: 0.75; } }
-
+.titles { text-align: center; }
 h1 { margin: 0; }
 .eyebrow {
   display: block; margin-bottom: clamp(10px, 1.8vh, 18px);
@@ -123,7 +163,13 @@ h1 { margin: 0; }
 .dots i:nth-child(5) { animation-delay: 0.6s; }
 .dots i:nth-child(6) { animation-delay: 0.75s; }
 @keyframes dotwave { 0%, 60%, 100% { opacity: 0.25; transform: none; } 30% { opacity: 1; transform: translateY(-3px); } }
-.intro.ready .dots i { animation: none; opacity: 0.9; transition: opacity 0.8s ease; }
+/* Loading done: one unified settle in place of the wave. */
+.intro.ready .dots i { animation: settle 0.55s ease both; opacity: 0.9; transition: opacity 0.8s ease; }
+@keyframes settle {
+  0% { opacity: 0.25; transform: none; }
+  45% { opacity: 1; transform: translateY(-2.5px); }
+  100% { opacity: 0.9; transform: none; }
+}
 
 .cta {
   margin: 0; font-size: clamp(0.72rem, 1.7vmin, 0.86rem);
@@ -136,11 +182,20 @@ h1 { margin: 0; }
   background: linear-gradient(90deg, transparent, rgba(233,193,92,0.85), transparent);
   transform: scaleX(0); transition: transform 1s cubic-bezier(0.2, 0.7, 0.2, 1) 0.7s;
 }
-.ready .cta, .cta.show { opacity: 0.92; transform: none; }
-.ready .cta::after, .cta.show::after { transform: scaleX(1); }
-.intro.ready:hover .cta, .intro.ready:focus-visible .cta,
+.cta.show { opacity: 0.92; transform: none; }
+.cta.show::after { transform: scaleX(1); }
+/* Not a control - the quiet word between the doors once the game is ready. */
+.enter { position: absolute; left: 0; right: 0; top: calc(50% - 0.95em); text-align: center; pointer-events: none; }
+.ready .enter { opacity: 0.92; transform: none; }
+.ready .enter::after { transform: scaleX(1); }
+.intro.ready .d20 { cursor: pointer; }
 .pause:hover .cta, .pause:focus-visible .cta { color: #f7d98d; opacity: 1; }
-.intro.ready, .pause { cursor: pointer; }
+.intro.ready .d20:hover .underlight { opacity: 0.95; }
+/* A hovered door leans forward off its hinge - hover only, so the keyboard
+ * focus parked on 20 never enlarges it by itself. */
+.intro.ready .doorway.left .door:hover { transform: rotateY(13deg) scale(1.045); }
+.intro.ready .doorway.right .door:hover { transform: rotateY(-13deg) scale(1.045); }
+.pause { cursor: pointer; }
 
 .msg {
   margin: 0; font-size: clamp(0.78rem, 2vmin, 0.95rem);
@@ -149,15 +204,20 @@ h1 { margin: 0; }
 }
 
 /* ---- entrances ---- */
-.intro .emblem, .fatal .emblem { animation: rise 0.95s cubic-bezier(0.16, 0.7, 0.24, 1) 0.08s both; }
-.intro .titles, .fatal .msg   { animation: rise 0.95s cubic-bezier(0.16, 0.7, 0.24, 1) 0.22s both; }
-.intro .doornum, .fatal .doornum { animation: rise 0.95s cubic-bezier(0.16, 0.7, 0.24, 1) 0.34s both; }
+.intro .titles { animation: rise 0.95s cubic-bezier(0.16, 0.7, 0.24, 1) 0.08s both; }
+.intro .doorway.left { animation: rise 0.95s cubic-bezier(0.16, 0.7, 0.24, 1) 0.22s both; }
+.intro .doorway.right { animation: rise 0.95s cubic-bezier(0.16, 0.7, 0.24, 1) 0.34s both; }
+.fatal .emblem { animation: rise 0.95s cubic-bezier(0.16, 0.7, 0.24, 1) 0.08s both; }
+.fatal .msg { animation: rise 0.95s cubic-bezier(0.16, 0.7, 0.24, 1) 0.22s both; }
 @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 
-/* ---- door opening onto the scene ---- */
-.intro .door { transition: transform 1.18s cubic-bezier(0.68, 0.03, 0.22, 0.99), opacity 0.3s ease 0.88s; will-change: transform; }
+/* ---- door 20 opening onto the scene ---- */
 .intro.open { pointer-events: none; }
-.intro.open .door { transform: rotateY(-87deg); opacity: 0; }
+.intro.open .hall { transform: scale(2.1); opacity: 0; }
+.intro.open .doorway.right .door {
+  transform: rotateY(-87deg);
+  transition: transform 1.18s cubic-bezier(0.68, 0.03, 0.22, 0.99);
+}
 .intro.open .doorshade { opacity: 0.65; }
 
 /* ---- pause: doorbell over the frozen frame ---- */
@@ -180,10 +240,11 @@ h1 { margin: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .intro .emblem, .fatal .emblem, .intro .titles, .fatal .msg, .intro .doornum, .fatal .doornum,
-  .intro .dots i, .ready .lens-halo, .veil.pause .stack, .pause:hover .bell svg { animation: none !important; }
-  .intro .door { transition: opacity 0.45s ease; }
-  .intro.open .door { transform: none; opacity: 0; }
+  .intro .titles, .intro .doorway.left, .intro .doorway.right, .fatal .emblem, .fatal .msg,
+  .intro .dots i, .intro .door::after, .veil.pause .stack, .pause:hover .bell svg { animation: none !important; }
+  .intro .hall { transition: opacity 0.45s ease; }
+  .intro.open .hall { transform: none; opacity: 0; }
+  .intro.open .doorway.right .door { transform: rotateY(-13deg); transition: none; }
 }
 `
 
@@ -203,89 +264,6 @@ function beadRing(cx: number, cy: number, R: number, n: number, r: number): stri
     const a = (i / n) * Math.PI * 2 - Math.PI / 2
     return `<circle cx="${(cx + R * Math.cos(a)).toFixed(1)}" cy="${(cy + R * Math.sin(a)).toFixed(1)}" r="${r}"/>`
   }).join('')
-}
-
-/** The scrolled peephole frame.  Ids are prefixed so two instances never
- * collide.  The corner and crest scrolls are one spiral path reused under
- * mirrored transforms; a specular-lighting filter gives the flat gold fills
- * their moulded-ceramic relief. */
-function frameSvg(p: string): string {
-  return `
-<svg viewBox="-20 -20 300 330" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="${p}gg" x1="0" y1="10" x2="0" y2="260" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#f6ce46"/><stop offset="0.55" stop-color="#e5ae24"/><stop offset="1" stop-color="#c9931a"/>
-    </linearGradient>
-    <radialGradient id="${p}ringG" cx="0.38" cy="0.32" r="0.75">
-      <stop offset="0" stop-color="#9d7b33"/><stop offset="0.6" stop-color="#6f521d"/><stop offset="1" stop-color="#3c2b0d"/>
-    </radialGradient>
-    <radialGradient id="${p}lensG" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#221507"/><stop offset="0.75" stop-color="#0d0803"/><stop offset="1" stop-color="#050302"/>
-    </radialGradient>
-    <radialGradient id="${p}glowG" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#fff6d8"/><stop offset="0.45" stop-color="#ffd67e"/><stop offset="1" stop-color="#b97a1e" stop-opacity="0"/>
-    </radialGradient>
-    <radialGradient id="${p}haloG" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#ffd98c" stop-opacity="0.85"/><stop offset="1" stop-color="#ffd98c" stop-opacity="0"/>
-    </radialGradient>
-    <filter id="${p}mold" x="-30%" y="-30%" width="160%" height="160%">
-      <feGaussianBlur in="SourceAlpha" stdDeviation="2.4" result="b"/>
-      <feSpecularLighting in="b" surfaceScale="3.6" specularConstant="0.55" specularExponent="13" lighting-color="#fff1b8" result="s">
-        <fePointLight x="60" y="-60" z="230"/>
-      </feSpecularLighting>
-      <feComposite in="s" in2="SourceAlpha" operator="in" result="si"/>
-      <feFlood flood-color="#7c5a10" flood-opacity="0.9" result="dk"/>
-      <feComposite in="dk" in2="SourceAlpha" operator="in" result="dkin"/>
-      <feOffset in="dkin" dx="0" dy="2.4" result="dko"/>
-      <feMerge><feMergeNode in="dko"/><feMergeNode in="SourceGraphic"/><feMergeNode in="si"/></feMerge>
-    </filter>
-    <filter id="${p}dsh" x="-25%" y="-25%" width="150%" height="160%">
-      <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#140b26" flood-opacity="0.55"/>
-    </filter>
-    <path id="${p}vol" d="M70,-10 C56,-3 47,2 40,0 A20,20 0 0 1 0,0 A13.5,13.5 0 0 1 27,0 A8.5,8.5 0 0 1 10,0 A4.5,4.5 0 0 1 19,0"
-      fill="none" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
-    <path id="${p}volS" d="M52,-6 C46,-2 44,1 40,0 A20,20 0 0 1 0,0 A13.5,13.5 0 0 1 27,0 A8.5,8.5 0 0 1 10,0 A4.5,4.5 0 0 1 19,0"
-      fill="none" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
-    <g id="${p}corner">
-      <g transform="translate(34,37) scale(1.12) translate(-34,-37)">
-        <use href="#${p}vol" transform="translate(22,6.4) rotate(41.6)"/>
-        <use href="#${p}vol" transform="translate(34,37) matrix(0 1 1 0 0 0) translate(-12,-30.6) rotate(41.6)"/>
-        <circle cx="24" cy="30" r="6.5" stroke="none"/>
-      </g>
-      <rect x="-6.5" y="-17" width="13" height="34" rx="6.5" stroke="none" transform="translate(33.4,39.4) rotate(45)"/>
-    </g>
-    <g id="${p}crestT">
-      <use href="#${p}volS" transform="translate(121,17.1) rotate(79.3) scale(0.55)"/>
-      <use href="#${p}volS" transform="translate(139,17.1) scale(-1,1) rotate(79.3) scale(0.55)"/>
-    </g>
-    <g id="${p}crestL">
-      <use href="#${p}volS" transform="translate(12.7,135.3) rotate(23.6) scale(0.55)"/>
-      <use href="#${p}volS" transform="translate(12.7,154.7) scale(1,-1) rotate(-23.6) scale(0.55)"/>
-    </g>
-  </defs>
-  <g filter="url(#${p}dsh)">
-    <g filter="url(#${p}mold)" fill="url(#${p}gg)" stroke="url(#${p}gg)">
-      <path stroke="none" fill-rule="evenodd" d="M64,37 h132 a30,30 0 0 1 30,30 v156 a30,30 0 0 1 -30,30 h-132 a30,30 0 0 1 -30,-30 v-156 a30,30 0 0 1 30,-30 z M90,75 h80 a18,18 0 0 1 18,18 v104 a18,18 0 0 1 -18,18 h-80 a18,18 0 0 1 -18,-18 v-104 a18,18 0 0 1 18,-18 z"/>
-      <use href="#${p}corner"/>
-      <use href="#${p}corner" transform="translate(260,0) scale(-1,1)"/>
-      <use href="#${p}corner" transform="translate(0,290) scale(1,-1)"/>
-      <use href="#${p}corner" transform="translate(260,290) scale(-1,-1)"/>
-      <use href="#${p}crestT"/>
-      <use href="#${p}crestT" transform="translate(0,290) scale(1,-1)"/>
-      <use href="#${p}crestL"/>
-      <use href="#${p}crestL" transform="translate(260,0) scale(-1,1)"/>
-    </g>
-    <g>
-      <circle cx="130" cy="145" r="16" fill="url(#${p}ringG)"/>
-      <path d="M118.7,133.7 A16,16 0 0 1 141.3,133.7" stroke="#f2dc9e" stroke-width="1.4" opacity="0.7" fill="none"/>
-      <circle cx="130" cy="145" r="11" fill="#160f08"/>
-      <circle cx="130" cy="145" r="8.4" fill="url(#${p}lensG)"/>
-      <circle class="lens-glow" cx="130" cy="145" r="8.4" fill="url(#${p}glowG)"/>
-      <ellipse cx="126.6" cy="141.2" rx="2" ry="1.3" transform="rotate(-32 126.6 141.2)" fill="#ffffff" opacity="0.8"/>
-      <circle class="lens-halo" cx="130" cy="145" r="30" fill="url(#${p}haloG)"/>
-    </g>
-  </g>
-</svg>`
 }
 
 /** The ornate brass doorbell from the door, beads and dome under the same
@@ -355,34 +333,49 @@ function reducedMotion(): boolean {
 export class Ui {
   private intro: HTMLDivElement
   private pause: HTMLDivElement
+  /** Door 20 - the only wired door until apartment 19 exists. */
+  private enterDoor: HTMLElement
   private hooks: UiHooks
   private isReady = false
   private opened = false
   private entered = false
+  private hideTimer = 0
 
   constructor(hooks: UiHooks) {
     this.hooks = hooks
     installStyles()
 
     this.intro = build(`
-      <div class="veil intro" role="button" tabindex="0" aria-label="Enter the apartment">
-        <div class="door">
+      <div class="veil intro">
+        <div class="hall">
           <div class="grain"></div>
-          <div class="molding"></div>
-          <span class="doornum">20</span>
-          <div class="stack">
-            <div class="emblem">${frameSvg('i')}</div>
-            <div class="titles">
-              <h1 aria-label="The One with the Apartment"><span class="eyebrow" aria-hidden="true">The One With</span><span class="title-main" aria-hidden="true">The Apartment</span></h1>
-              <div class="dots"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <header class="titles">
+            <h1 aria-label="The One with the Apartment"><span class="eyebrow" aria-hidden="true">The One With</span><span class="title-main" aria-hidden="true">The Apartment</span></h1>
+            <div class="dots"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          </header>
+          <div class="doors">
+            <div class="doorway left" aria-hidden="true">
+              <div class="door d19">
+                <div class="grain"></div>
+                <div class="molding"></div>
+                <span class="doornum">19</span>
+              </div>
             </div>
-            <p class="cta">Enter</p>
+            <p class="cta enter" aria-hidden="true">Enter</p>
+            <div class="doorway right">
+              <div class="door d20" role="button" tabindex="0" aria-label="Enter apartment 20">
+                <div class="grain"></div>
+                <div class="molding"></div>
+                <span class="doornum">20</span>
+                <div class="underlight"></div>
+                <div class="doorshade"></div>
+              </div>
+            </div>
           </div>
-          <div class="underlight"></div>
-          <div class="doorshade"></div>
         </div>
       </div>`)
-    activate(this.intro, () => {
+    this.enterDoor = this.intro.querySelector('.d20') as HTMLElement
+    activate(this.enterDoor, () => {
       if (this.isReady && !this.opened) this.hooks.onEnter()
     })
     document.body.appendChild(this.intro)
@@ -403,7 +396,7 @@ export class Ui {
   ready(): void {
     this.isReady = true
     this.intro.classList.add('ready')
-    this.intro.focus({ preventScroll: true })
+    this.enterDoor.focus({ preventScroll: true })
   }
 
   enterGame(): void {
@@ -412,15 +405,30 @@ export class Ui {
     this.opened = true
     this.entered = true
     if (this.isReady) {
-      // Swing the door open onto the live scene, then drop the veil entirely.
+      // Swing door 20 open and fall through it, then drop the veil entirely.
+      // Blur first: a keyboard entry would otherwise hold :focus-visible,
+      // whose straightened hover pose outranks the swing.
+      this.enterDoor.blur()
       this.intro.classList.add('open')
-      window.setTimeout(() => {
+      this.hideTimer = window.setTimeout(() => {
         this.intro.style.display = 'none'
       }, reducedMotion() ? OPEN_MS_REDUCED : OPEN_MS)
     } else {
       // Inspection bookmarks skip the doorway.
       this.intro.style.display = 'none'
     }
+  }
+
+  /** Back out onto the landing (the E exit at the front door): the veil
+   * returns closed, ready to choose a door again. */
+  showHallway(): void {
+    if (!this.entered) return
+    this.hidePause()
+    window.clearTimeout(this.hideTimer)
+    this.opened = false
+    this.intro.classList.remove('open')
+    this.intro.style.display = ''
+    if (this.isReady) this.enterDoor.focus({ preventScroll: true })
   }
 
   showPause(): void {
@@ -441,9 +449,8 @@ export class Ui {
         <div class="door">
           <div class="grain"></div>
           <div class="molding"></div>
-          <span class="doornum">20</span>
           <div class="stack">
-            <div class="emblem">${frameSvg('f')}</div>
+            <img class="emblem" src="/decoration.png" alt="" draggable="false">
             <p class="msg">${msg}</p>
           </div>
         </div>

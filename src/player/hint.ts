@@ -1,6 +1,7 @@
-/** The contextual seat prompt: one short serif line (plus an optional second
- * for sliding along the sofa), faded in only while a seat can be taken or
- * left.  Typography follows the intro veil; nothing else joins it on screen. */
+/** The contextual interaction prompt: one short serif line (plus an optional
+ * second for sliding along the sofa), faded in only while a seat can be taken
+ * or left or the front door offers the hallway.  Typography follows the intro
+ * veil; nothing else joins it on screen. */
 
 const CSS = `
 .seat-hint {

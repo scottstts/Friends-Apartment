@@ -80,6 +80,9 @@ async function boot(): Promise<void> {
   let controls: PlayerControls | null = null
   let seats: SeatingSystem | null = null
   let started = false
+  // E at the front door: the next pointer-lock exit opens the hallway veil
+  // instead of the pause veil.
+  let toHallway = false
 
   const ui = new Ui({
     onEnter: () => {
@@ -106,7 +109,11 @@ async function boot(): Promise<void> {
 
   controls = new PlayerControls(camera, world.colliders)
   controls.spawn(2.3, -1.15, 6.4, 3.9)
-  if (!inspection) seats = new SeatingSystem(controls, camera)
+  if (!inspection)
+    seats = new SeatingSystem(controls, camera, () => {
+      toHallway = true
+      document.exitPointerLock()
+    })
   if (inspection) {
     applyCameraBookmark(camera, inspection.view)
     ui.enterGame()
@@ -237,7 +244,12 @@ async function boot(): Promise<void> {
       startRendering()
     } else if (started) {
       stopRendering()
-      ui.showPause()
+      if (toHallway) {
+        toHallway = false
+        ui.showHallway()
+      } else {
+        ui.showPause()
+      }
     }
   })
 

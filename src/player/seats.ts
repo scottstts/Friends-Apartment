@@ -1,5 +1,7 @@
 /** Seat interactions: the window armchair, the slipper chair (its ottoman as
- * the foot rest), the three-cushion sofa, and the foot of either bed.
+ * the foot rest), the three-cushion sofa, and the foot of either bed.  The
+ * front door joins them: walking up to it offers the E exit back out to the
+ * hallway veil, where a door can be chosen again.
  *
  * Walking near a seat offers "Press E to sit"; E sits, E stands, and on the
  * sofa A/D slide one cushion at a time.  While seated the walker stands down
@@ -170,8 +172,13 @@ function buildTargets(): SeatTarget[] {
   return targets
 }
 
+/** The approach zone just inside the closed front door (west wall, x = 0). */
+const DOOR_XY: [number, number] = [0.42, (L.FD_Y[0] + L.FD_Y[1]) / 2]
+const DOOR_R = 0.8
+
 const K = (c: string): string => `<span class="k">${c}</span>`
 const HINT_SIT = `Press ${K('E')} to sit`
+const HINT_DOOR = `Press ${K('E')} to go to hallway`
 const HINT_STAND = `Press ${K('E')} to stand`
 const HINT_LEFT = `Press ${K('A')} to move left`
 const HINT_RIGHT = `Press ${K('D')} to move right`
@@ -203,18 +210,33 @@ export class SeatingSystem {
   private seatedTime = 0
   private last: Pose = { x: 0, y: 0, z: EYE, yaw: 0, pitch: 0, roll: 0 }
 
-  constructor(controls: PlayerControls, camera: THREE.PerspectiveCamera) {
+  /** Fires on E at the front door; the host swaps pointer lock for the veil. */
+  private onHallway?: () => void
+
+  constructor(controls: PlayerControls, camera: THREE.PerspectiveCamera, onHallway?: () => void) {
     this.controls = controls
     this.camera = camera
+    this.onHallway = onHallway
     window.addEventListener('keydown', (e) => this.onKey(e))
+  }
+
+  private nearDoor(px: number, py: number): boolean {
+    return this.onHallway !== undefined && Math.hypot(px - DOOR_XY[0], py - DOOR_XY[1]) <= DOOR_R
   }
 
   private onKey(e: KeyboardEvent): void {
     if (!this.controls.enabled || e.repeat) return
     const m = this.mode
     if (e.code === 'KeyE') {
-      if (m.k === 'walk') this.trySit()
-      else if (m.k === 'seated') this.beginStand(m)
+      if (m.k === 'walk') {
+        const p = this.controls.getPose()
+        if (this.nearDoor(p.x, p.y)) {
+          this.hint.hide()
+          this.onHallway?.()
+        } else {
+          this.trySit()
+        }
+      } else if (m.k === 'seated') this.beginStand(m)
     } else if (m.k === 'seated' && m.tgt.kind === 'couch') {
       // A slides towards the sitter's left (north, +Y), D towards the right
       if (e.code === 'KeyA' && m.idx < m.tgt.spots.length - 1) this.beginScoot(m, m.idx + 1)
@@ -295,7 +317,8 @@ export class SeatingSystem {
     }
     if (m.k === 'walk') {
       const p = this.controls.getPose()
-      if (this.nearest(p.x, p.y)) this.hint.show(HINT_SIT)
+      if (this.nearDoor(p.x, p.y)) this.hint.show(HINT_DOOR)
+      else if (this.nearest(p.x, p.y)) this.hint.show(HINT_SIT)
       else this.hint.hide()
       return
     }
