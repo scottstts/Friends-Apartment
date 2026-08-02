@@ -5,6 +5,7 @@ import * as mlib from '../../lib/mlib'
 import { PyRandom } from '../../lib/rng'
 import type { World } from '../../scene/world'
 import * as L from './layout'
+import { bbHex, GLOW_K } from './lighting'
 import * as M from './materials'
 import * as P from './props'
 
@@ -40,7 +41,7 @@ function buildMaterials(): void {
   M.carpet('M_MatWhite', 'E4E0D6', { rough: 0.94 })
   M.carpet('M_MatRed', 'AE2B26', { rough: 0.94 })
   M.paint('M_LampShade', 'E6E2D6', { rough: 0.55 })
-  M.emissive('M_FloorShadeGlow', 'FFE8CC', { strength: 1.6, rough: 0.55, base: 'E6E2D6' })
+  M.emissive('M_FloorShadeGlow', bbHex(GLOW_K), { strength: 1.6, rough: 0.55, base: 'E6E2D6' })
   M.picture('M_ArtLaurel', '/Laurel_and_Hardy_poster.jpeg', { rough: 0.4, gloss: 0.28 })
   M.picture('M_ArtVendetta', '/Vendetta_poster.jpg', { rough: 0.36, gloss: 0.34 })
   M.picture('M_ArtDieHard', '/die_hard.jpeg', { rough: 0.38, gloss: 0.3 })
@@ -228,7 +229,9 @@ function addArt(world: World, width:number,height:number,wall:'W'|'E',u:number,z
 
 function buildArtAndDressing(world: World): void {
   addArt(world,0.92,0.604,'W',(L.ENT_Y[0]+L.ENT_Y[1])*0.5,2.285,L.WX,'M_ArtLaurel','M_DarkWood',0.044)
-  addArt(world,0.69,0.981,'E',1.05,1.615,L.EX,'M_ArtDieHard','M_DarkWood',0.03)
+  // User-moved off f_living.py's (1.05, 1.615): centred in the east wall's
+  // applied panel (shell.ts addPanels: centre u 1.55 from SY, z 1.415).
+  addArt(world,0.69,0.981,'E',L.SY+1.55,1.415,L.EX,'M_ArtDieHard','M_DarkWood',0.03)
   addArt(world,0.6,0.937,'W',6.34,1.62,L.WX,'M_ArtVendetta','M_TVCase',0.028)
   for (const [i,dx,dy,rz,mat] of [[0,-0.3,-0.06,0.18,'M_MagA'],[1,-0.16,0.05,-0.3,'M_MagB'],[2,0.24,-0.03,0.42,'M_MagA']] as const) {
     const magazine=mlib.box(-0.105,-0.14,i*0.007,0.105,0.14,i*0.007+0.006); mlib.rotateZ(magazine,rz); mlib.translate(magazine,[L.COFFEE_C[0]+dx,L.COFFEE_C[1]+dy,0.405]); add(world,magazine,M.get(mat))

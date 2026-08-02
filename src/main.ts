@@ -153,9 +153,11 @@ async function boot():Promise<void> {
     const previousScene=scenePass.scene
     scenePass.scene=apartment.world.scene
     try{
+      // Freeze every map before the first warm-up pass: a light still on
+      // autoUpdate re-renders its map during every earlier light's pass.
+      for(const light of apartment.world.lights)if(light.castShadow&&light.shadow)light.shadow.autoUpdate=false
       for(const light of apartment.world.lights){
         if(!light.castShadow||!light.shadow)continue
-        light.shadow.autoUpdate=false
         light.shadow.needsUpdate=true
         postProcessing.render()
         await nextFrame()

@@ -375,7 +375,9 @@ function planarUvs(md: MeshData): void {
   const x1 = Math.max(...xs)
   const z0 = Math.min(...zs)
   const z1 = Math.max(...zs)
-  md.uvs = md.faces.map((face) => face.map((vi) => [(md.verts[vi][0] - x0) / Math.max(1e-6, x1 - x0), (md.verts[vi][2] - z0) / Math.max(1e-6, z1 - z0)] as Vec2))
+  // The art face displays along local +y, so screen-right is local -x: u must
+  // run against +x or every wall picture renders mirror-reversed.
+  md.uvs = md.faces.map((face) => face.map((vi) => [(x1 - md.verts[vi][0]) / Math.max(1e-6, x1 - x0), (md.verts[vi][2] - z0) / Math.max(1e-6, z1 - z0)] as Vec2))
 }
 
 export function frameArt(width: number, height: number, depth = 0.03, moulding = 0.042, rebate = 0.008, standoff = 0): [MeshData, MeshData] {

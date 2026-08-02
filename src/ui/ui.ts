@@ -365,7 +365,7 @@ export class Ui {
         <div class="hall">
           <div class="grain"></div>
           <header class="titles">
-            <h1 aria-label="The One with the Apartment"><span class="eyebrow" aria-hidden="true">The One With</span><span class="title-main" aria-hidden="true">The Apartment</span></h1>
+            <h1 aria-label="The One with the Apartments"><span class="eyebrow" aria-hidden="true">The One With</span><span class="title-main" aria-hidden="true">The Apartments</span></h1>
             <div class="dots"><i></i><i></i><i></i><i></i><i></i><i></i></div>
           </header>
           <div class="doors">
