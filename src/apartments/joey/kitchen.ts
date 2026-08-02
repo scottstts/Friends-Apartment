@@ -105,7 +105,9 @@ function buildCounter(world: World): void {
   const deck = top - 0.038
   const band0 = deck - 0.026
   add(world, P.plinth(px0 + 0.045, py0 + 0.045, px1 - 0.045, py1 - 0.03, 0, 0.098), M.get('M_IslePutty'), true)
-  add(world, rounded(px0, py0, 0.092, px1, py1, band0, 0.003), M.get('M_IslePutty'))
+  // The plinth stops below the player's 250 mm collision threshold. The
+  // cabinet body owns the peninsula's real blocking footprint and height.
+  add(world, rounded(px0, py0, 0.092, px1, py1, band0, 0.003), M.get('M_IslePutty'), true)
 
   const profile: [number, number][] = [[0, -0.002], [0.03, -0.002], [0.03, 0.006], [0.021, 0.013], [0.008, 0.014], [0, 0.01]]
   const cz = (0.092 + band0) * 0.5

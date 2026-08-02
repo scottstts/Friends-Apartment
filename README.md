@@ -1,8 +1,8 @@
-# The One With the Apartment
+# The One With the Apartments
 
-A procedural Three.js WebGPU recreation of Monica's apartment from *Friends*. Use WASD to walk, the mouse to look, and Escape to pause.
+A procedural Three.js WebGPU recreation of Monica's apartment 20 and Joey and Chandler's apartment 19 from *Friends*. Choose an apartment, then use WASD to walk, the mouse to look, and Escape to pause.
 
-![Monica's Apartment](assets/screenshot.jpeg)
+![Apartment 19/20](assets/screenshot.png)
 **Play Live: *https://friends3.scottsun.io***
 
 ## Requirements

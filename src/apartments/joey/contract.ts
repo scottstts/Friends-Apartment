@@ -28,6 +28,7 @@ export const JOEY_VISUAL_CONTRACT = {
   ],
   allowedDivergences: [
     'User-approved: replace the Blender build daytime physical sky with apartment 20\'s night sky, moon and distant-city ambience while retaining apartment 19 exterior geometry and fixture-authored practical lighting.',
+    'User-approved: only ceiling-mounted overhead and kitchen under-cabinet/hood fixtures illuminate the scene; every other fixture retains an emissive visible bulb or diffuser but owns no analytic light.',
   ] as string[],
   frameBudgetMs: 16.7,
 } as const

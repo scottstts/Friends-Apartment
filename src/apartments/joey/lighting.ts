@@ -18,9 +18,9 @@ function buildMaterials():void {
   M.emissive('M_BulbGlow','FFE8CC',{strength:6})
   M.emissive('M_DomeGlow','FFEBD2',{strength:2.4})
   M.emissive('M_StripGlow','FFE8CC',{strength:3.4})
+  M.emissive('M_OpalGlow','FFE8CC',{strength:2.4,rough:0.42,base:'F0EADA'})
   M.metal('M_FixBrass','A8842E',{rough:0.3,grime:0.35})
   M.metal('M_FixChrome','D6DADE',{rough:0.1,grime:0.3})
-  M.plastic('M_Opal','F0EADA',{rough:0.42,coat:0.2})
 }
 
 function ceilingRose(world:World,cx:number,cy:number,energy:number,z=L.CZ,shadow=true,size=0.13):void {
@@ -32,11 +32,10 @@ function ceilingRose(world:World,cx:number,cy:number,energy:number,z=L.CZ,shadow
   world.pointLight([cx,cy,z-0.115],energy*GAIN,WARM,size,{shadow,distance:5.4,shadowMapSize:512,shadowRadius:5})
 }
 
-function bulb(world:World,loc:[number,number,number],energy:number,shadow=false):void {
+function lampBulb(world:World,loc:[number,number,number]):void {
   const md=P.lathe([[0,0],[0.014,0.004],[0.028,0.03],[0.026,0.058],[0.014,0.076],[0,0.08]],16)
   M.get('M_BulbGlow').userData.noShadow=true
   add(world,mlib.translate(md,loc),M.get('M_BulbGlow'))
-  world.pointLight([loc[0],loc[1],loc[2]+0.04],energy*GAIN,WARM,0.05,{shadow,distance:3.6,shadowMapSize:384,shadowRadius:3})
 }
 
 function sconce(world:World):void {
@@ -45,8 +44,7 @@ function sconce(world:World):void {
   const bowl=P.lathe([[0,0],[0.052,0.006],[0.098,0.042],[0.132,0.106],[0.134,0.112],[0.096,0.048],[0.05,0.014],[0,0.008]],28);mlib.translate(bowl,[0,0.104,-0.016]);parts.push(bowl)
   const lamp=P.lathe([[0,0],[0.021,0.008],[0.024,0.03],[0.018,0.05],[0,0.056]],14);mlib.translate(lamp,[0,0.104,0.03]);parts.push(lamp)
   P.wallPlace(parts,'W',6.86,2.24,L.WX)
-  add(world,plate,M.get('M_FixBrass'));add(world,bowl,M.get('M_Opal'));add(world,lamp,M.get('M_BulbGlow'))
-  world.pointLight([L.WX+0.104,6.86,2.27],210*GAIN,WARM,0.05,{shadow:false,distance:3.1})
+  add(world,plate,M.get('M_FixBrass'));add(world,bowl,M.get('M_OpalGlow'));add(world,lamp,M.get('M_BulbGlow'))
 }
 
 function kitchenStrips(world:World):void {
@@ -64,8 +62,7 @@ function vanity(world:World):void {
   const globes:MeshData[]=[]
   for(const i of [-1,0,1]){const globe=P.lathe([[0,0],[0.03,0.01],[0.046,0.042],[0.044,0.072],[0.026,0.092],[0,0.096]],20);mlib.rotX(globe,-Math.PI*0.5);mlib.translate(globe,[i*0.175,0.068,0]);globes.push(globe)}
   P.wallPlace([bar,...globes],'E',u,z,at)
-  add(world,bar,M.get('M_FixChrome'));for(const globe of globes)add(world,globe,M.get('M_Opal'))
-  world.pointLight([at-0.13,u,z],200*GAIN,WARM_HOT,0.06,{shadow:false,distance:2.7})
+  add(world,bar,M.get('M_FixChrome'));for(const globe of globes)add(world,globe,M.get('M_OpalGlow'))
 }
 
 export function build(world:World):void {
@@ -73,10 +70,10 @@ export function build(world:World):void {
   ceilingRose(world,(L.WX+L.JX)*0.5,(L.SY+L.NY)*0.5,watts(300),L.CZ,true,0.1)
   ceilingRose(world,(L.JX+L.EX)*0.5,(L.SY+L.NY2)*0.5,watts(250),L.CZ,true,0.1)
   sconce(world)
-  bulb(world,[L.FLOOR_LAMP[0],L.FLOOR_LAMP[1],1.52],320)
+  lampBulb(world,[L.FLOOR_LAMP[0],L.FLOOR_LAMP[1],1.52])
   kitchenStrips(world)
-  bulb(world,[L.JO_X[0]+0.3,1.72,0.87],135)
-  bulb(world,[L.CH_X[0]+0.3,3.42,0.87],135)
+  lampBulb(world,[L.JO_X[0]+0.3,1.72,0.87])
+  lampBulb(world,[L.CH_X[0]+0.3,3.42,0.87])
   ceilingRose(world,(L.JO_X[0]+L.JO_X[1])*0.5,(L.JO_Y[0]+L.JO_Y[1])*0.5,290,L.CZ,false)
   ceilingRose(world,(L.CH_X[0]+L.CH_X[1])*0.5,(L.CH_Y[0]+L.CH_Y[1])*0.5,290,L.CZ,false)
   vanity(world)

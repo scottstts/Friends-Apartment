@@ -40,6 +40,7 @@ function buildMaterials(): void {
   M.carpet('M_MatWhite', 'E4E0D6', { rough: 0.94 })
   M.carpet('M_MatRed', 'AE2B26', { rough: 0.94 })
   M.paint('M_LampShade', 'E6E2D6', { rough: 0.55 })
+  M.emissive('M_FloorShadeGlow', 'FFE8CC', { strength: 1.6, rough: 0.55, base: 'E6E2D6' })
   M.picture('M_ArtLaurel', '/Laurel_and_Hardy_poster.jpeg', { rough: 0.4, gloss: 0.28 })
   M.picture('M_ArtVendetta', '/Vendetta_poster.jpg', { rough: 0.36, gloss: 0.34 })
   M.picture('M_ArtDieHard', '/die_hard.jpeg', { rough: 0.38, gloss: 0.3 })
@@ -249,7 +250,7 @@ function buildFloorLamp(world: World): void {
   const [cx,cy]=L.FLOOR_LAMP
   add(world,mlib.translate(P.lathe([[0,0],[0.135,0],[0.138,0.01],[0.12,0.02],[0.026,0.03],[0.024,0.05],[0,0.052]],24),[cx,cy,0]),M.get('M_Steel'),true)
   add(world,P.rod([cx,cy,0.04],[cx,cy,1.64],0.0145,12),M.get('M_Steel'))
-  add(world,mlib.translate(P.lathe([[0,0],[0.154,0],[0.152,0.007],[0.113,0.198],[0.111,0.205],[0.15,0.011],[0,0.011]],30),[cx,cy,1.5]),M.get('M_LampShade'))
+  add(world,mlib.translate(P.lathe([[0,0],[0.154,0],[0.152,0.007],[0.113,0.198],[0.111,0.205],[0.15,0.011],[0,0.011]],30),[cx,cy,1.5]),M.get('M_FloorShadeGlow'))
 }
 
 export function build(world: World): void {

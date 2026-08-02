@@ -25,7 +25,7 @@ function buildMaterials():void {
   M.stone('M_VanityTop','EDEAE0',{vein:'C6BEB0',rough:0.14,scale:2})
   M.plastic('M_ShowerCurtain','DCE4E2',{rough:0.42,coat:0.1,bump:0.14})
   M.plastic('M_LampBase','2A2622',{rough:0.42})
-  M.paint('M_ShadeCream','E8E0CC',{rough:0.62})
+  M.emissive('M_ShadeCream','FFE8CC',{strength:1.6,rough:0.62,base:'E8E0CC'})
   M.carpet('M_BedRug','7A6A52',{rough:0.94})
   M.carpet('M_BedRug2','4E5A66',{rough:0.94})
   M.carpet('M_BathMat','C8D2CE',{rough:0.95,pile:1.3})

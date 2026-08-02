@@ -223,8 +223,16 @@ export function clearGlass(name: string, tint = 'E9F1F2', options: { rough?: num
   return remember(name, sharedPane(key(name), { tint, rough: options.rough ?? 0.015, baseAlpha: 0.085, edge: 0.72, bumpn: options.smear ? 90 : 0 }))
 }
 
-export function emissive(name: string, color = 'FFF1D2', options: { strength?: number } = {}): THREE.Material {
-  return remember(name, sharedEmissive(key(name), color, { strength: options.strength ?? 6, rough: 0.58 }))
+export function emissive(
+  name: string,
+  color = 'FFF1D2',
+  options: { strength?: number; rough?: number; base?: string } = {},
+): THREE.Material {
+  return remember(name, sharedEmissive(key(name), color, {
+    strength: options.strength ?? 6,
+    rough: options.rough ?? 0.58,
+    base: options.base,
+  }))
 }
 
 export function plastic(
