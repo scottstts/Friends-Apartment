@@ -21,7 +21,7 @@ export const JOEY_VISUAL_CONTRACT = {
     'the peninsula turns on the jog wall and the counter reaches the east wall without a gap',
     'both recliners face west toward the entertainment unit and splay toward each other',
     'the floor lamp stands east of and clear of the couch-side two-tier table',
-    'the main ceiling roses occupy the regular eighth-point by sixth-point grid cells inside the stepped footprint',
+    'one main ceiling rose centers each zone: 300 W over the living room and 250 W over the kitchen alcove',
     'all door and window openings remain passable and their casings do not intersect the leaves',
     'the front-door threshold is floored and the player remains enclosed by authored colliders',
     'apartment 19 owns its scene, material cache, layout constants and interaction anchors',

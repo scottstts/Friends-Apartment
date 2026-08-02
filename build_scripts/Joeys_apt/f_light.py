@@ -92,7 +92,17 @@ def _lamp(name, kind, loc, energy, col=WARM, size=0.12, size_y=None,
 
 # ================================================================== fixtures
 
-def ceiling_rose(name, cx, cy, energy=52.0, z=None):
+def watts(w):
+    """An ABSOLUTE lamp power, in the watts Blender will actually store.
+
+    Everything else in here is a share of one scheme and goes through GAIN, so
+    the ratios between fixtures survive an exposure change.  The two ceiling
+    lights are specified directly instead, so this undoes the gain on the way
+    in rather than leaving a magic number at the call site."""
+    return w / GAIN
+
+
+def ceiling_rose(name, cx, cy, energy=52.0, z=None, kind='AREA', size=0.26):
     """A flush-mount opal dome on a moulded ring - what is actually screwed to
     the ceiling of a walk-up like this.  The dome is the emitter you SEE; the
     area light just under it is the emitter that does the work."""
@@ -115,8 +125,8 @@ def ceiling_rose(name, cx, cy, energy=52.0, z=None):
 
     # an AREA light already points along -Z; adding a pi rotation about X - the
     # obvious "aim it down" - turns it round to light the ceiling void instead
-    lamp = _lamp(name + "_L", 'AREA', (cx, cy, z - 0.115), energy, WARM,
-                 size=0.26)
+    lamp = _lamp(name + "_L", kind, (cx, cy, z - 0.115), energy, WARM,
+                 size=size)
     return [ring, dome, lamp]
 
 
@@ -300,26 +310,17 @@ def build(bake=True):
     build_env.world(strength=1.20, turbidity=2.4, elev=52.0, rot=200.0)
 
     # ---- ceiling roses ----------------------------------------------------
-    # A REGULAR GRID, not fixtures dropped one at a time wherever the room
-    # looked dark.  Four roses cannot cover 65 m2: the west half of this flat
-    # had no overhead fixture at all - the nearest one to the entertainment
-    # wall was two metres away, so everything from the bookcase to Joey's door
-    # was lit by bounce, which is why that side went flat and dim.
+    # TWO overhead lights in the main space, one over each zone, and they are
+    # POINT sources: the jog splits this floor into a living room west of it
+    # and a kitchen alcove east, and each gets a single fixture at the middle
+    # of its own area.  The living room's is the brighter of the two because
+    # it is the bigger room by half again.
     #
-    # Columns sit on the eighth-points of the flat's width and rows on the
-    # sixth-points of its depth, so every fixture is half a bay from the wall
-    # behind it and a full bay from its neighbours - the layout an electrician
-    # sets out, and it reads as deliberate from any angle.  Two of the twelve
-    # cells fall outside the room, because the kitchen alcove stops at the jog,
-    # so they are simply not built.
-    COLS = [L.EX * (2 * k + 1) / 8.0 for k in range(4)]          # 1.06 .. 7.41
-    ROWS = [L.SY + (L.NY - L.SY) * (2 * k + 1) / 6.0 for k in range(3)]
-    for cx in COLS:
-        for cy in ROWS:
-            if cx > L.JX and cy > L.NY2:        # the alcove ends at the jog
-                continue
-            ceiling_rose("LT_Rose_%02d%02d" % (round(cx * 10), round(cy * 10)),
-                         cx, cy, energy=300.0)
+    # Both energies are absolute watts, not a share of GAIN - see watts().
+    ceiling_rose("LT_RoseLiving", (L.WX + L.JX) * 0.5, (L.SY + L.NY) * 0.5,
+                 energy=watts(300.0), kind='POINT', size=0.10)
+    ceiling_rose("LT_RoseKitchen", (L.JX + L.EX) * 0.5, (L.SY + L.NY2) * 0.5,
+                 energy=watts(250.0), kind='POINT', size=0.10)
 
     # ---- practicals in the living room ------------------------------------
     sconce("LT_Sconce", 6.86, 2.24, 'W', L.WX, energy=210.0)

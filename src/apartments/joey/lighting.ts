@@ -11,6 +11,7 @@ import * as P from './props'
 const GAIN=0.185
 const WARM=srgbTriple('FFEBD2')
 const WARM_HOT=srgbTriple('FFE8CC')
+const watts=(value:number):number=>value/GAIN
 const add=(world:World,md:MeshData,material:THREE.Material):MeshData=>world.add(md,material)
 
 function buildMaterials():void {
@@ -22,13 +23,13 @@ function buildMaterials():void {
   M.plastic('M_Opal','F0EADA',{rough:0.42,coat:0.2})
 }
 
-function ceilingRose(world:World,cx:number,cy:number,energy:number,z=L.CZ,shadow=true):void {
+function ceilingRose(world:World,cx:number,cy:number,energy:number,z=L.CZ,shadow=true,size=0.13):void {
   const ring=P.lathe([[0,0],[0.155,0],[0.152,-0.014],[0.128,-0.022],[0.126,-0.03],[0,-0.032]],30)
   add(world,mlib.translate(ring,[cx,cy,z]),M.get('M_FixBrass'))
   const profile:[number,number][]=[[0,-0.02]]
   for(let i=0;i<=10;i++){const a=Math.PI*0.5*i/10;profile.push([0.148*Math.cos(a),-0.026-0.115*Math.sin(a)])}
   const dome=mlib.translate(P.lathe(profile,30),[cx,cy,z]);M.get('M_DomeGlow').userData.noShadow=true;add(world,dome,M.get('M_DomeGlow'))
-  world.pointLight([cx,cy,z-0.115],energy*GAIN,WARM,0.13,{shadow,distance:5.4,shadowMapSize:512,shadowRadius:5})
+  world.pointLight([cx,cy,z-0.115],energy*GAIN,WARM,size,{shadow,distance:5.4,shadowMapSize:512,shadowRadius:5})
 }
 
 function bulb(world:World,loc:[number,number,number],energy:number,shadow=false):void {
@@ -69,17 +70,8 @@ function vanity(world:World):void {
 
 export function build(world:World):void {
   buildMaterials()
-  const columns=Array.from({length:4},(_,k)=>L.EX*(2*k+1)/8)
-  const rows=Array.from({length:3},(_,k)=>L.SY+(L.NY-L.SY)*(2*k+1)/6)
-  for(let column=0;column<columns.length;column++)for(let row=0;row<rows.length;row++){
-    const cx=columns[column],cy=rows[row]
-    if(cx>L.JX&&cy>L.NY2)continue
-    // All ten authored fixtures illuminate the room. WebGPU exposes only 16
-    // fragment samplers on baseline hardware, so alternate roses own the five
-    // evenly distributed shadow maps; otherwise textured materials require
-    // 19 samplers and their pipelines cannot be created at all.
-    ceilingRose(world,cx,cy,300,L.CZ,(column+row)%2===0)
-  }
+  ceilingRose(world,(L.WX+L.JX)*0.5,(L.SY+L.NY)*0.5,watts(300),L.CZ,true,0.1)
+  ceilingRose(world,(L.JX+L.EX)*0.5,(L.SY+L.NY2)*0.5,watts(250),L.CZ,true,0.1)
   sconce(world)
   bulb(world,[L.FLOOR_LAMP[0],L.FLOOR_LAMP[1],1.52],320)
   kitchenStrips(world)
