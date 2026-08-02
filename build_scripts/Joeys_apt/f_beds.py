@@ -380,6 +380,8 @@ def bed_rug(name, cx, cy, w, d, mat, rot=0.0):
 # The wall tiling stands 13 mm proud of the plaster, so nothing hung on a
 # bathroom wall may be placed on the wall LINE - it lands behind the tiles.
 TILE_F = 0.013
+BFL = 0.0145       # the bathroom floor tile's top - this room's datum
+TUBH = 0.560       # the bath's rim, above its OWN underside
 
 
 def _slab_with_hole(name, x0, y0, x1, y1, z0, z1, cx, cy, ax, ay, n=56,
@@ -552,108 +554,273 @@ def mirror_probe(u, z, at):
     return pr
 
 
+def _pan_ring(hw, yb, yf, z, n=44, waist=0.38):
+    """One horizontal section through a china pan.  Not an ellipse and not a
+    rounded rectangle: an EGG.  The widest line sits back of centre (`waist` of
+    the way from the back), the tail behind it is blunt and the nose in front of
+    it is long and tapered, which is what makes a lavatory read as a lavatory
+    rather than as a lathed bollard."""
+    cy = yb + (yf - yb) * waist
+    ring = []
+    for i in range(n):
+        a = math.tau * i / n
+        c = math.cos(a)
+        ring.append((hw * math.sin(a),
+                     cy + (yf - cy) * c if c >= 0 else cy + (cy - yb) * c,
+                     z))
+    return ring
+
+
 def wc():
-    """A close-coupled WC: a skirted pan lofted from its foot up over the rim
-    and back down into the bowl as one surface, a cistern against the tiles
-    with its own lid and lever, and a seat and lid on top.
+    """A close-coupled two-piece WC.
 
-    The pan used to be a lathed disc on a stub, which read from the doorway as
-    a white box with a plate in front of it."""
-    out = []
-    wx, wy = L.BA_WC
-    back = L.BA_X[1] - TILE_F + 0.004          # buried a hair into the tiles
-    # (width across y, depth along x, corner radius, z, x offset from wx)
-    prof = [(0.235, 0.290, 0.055, 0.006, 0.105),
-            (0.215, 0.262, 0.055, 0.088, 0.092),
-            (0.232, 0.256, 0.060, 0.172, 0.056),
-            (0.286, 0.282, 0.075, 0.256, 0.024),
-            (0.346, 0.312, 0.090, 0.332, 0.008),
-            (0.386, 0.332, 0.105, 0.380, 0.000),
-            (0.394, 0.338, 0.108, 0.396, 0.000),
-            (0.352, 0.300, 0.098, 0.390, 0.000),
-            (0.318, 0.272, 0.090, 0.338, 0.002),
-            (0.268, 0.228, 0.078, 0.288, 0.008),
-            (0.188, 0.164, 0.058, 0.248, 0.016),
-            (0.086, 0.076, 0.030, 0.230, 0.022)]
-    rings = []
-    for (dy, dx, r, zz, ox) in prof:
-        rings.append([(wx + ox + a, wy + b, zz)
-                      for (b, a) in mlib.rounded_rect(dy, dx, r, 5)])
-    pan = mlib.loft("R_WcPan", rings, close_u=False, close_v=True, cname=C,
+    Built facing +Y with its tank at -Y, then turned a quarter turn so it faces
+    the room with the tank against the tiled east wall.  The previous one was
+    lofted from rounded rectangles, which is round-cornered-oblong in plan - and
+    no lavatory is either an oblong or a circle.  This one is lofted from real
+    egg sections: a flared foot, a waisted ankle, an egg-shaped bowl hollowed
+    down to the trap, a squared casting shelf for the tank to bolt to, seat and
+    lid following the rim's own outline, trip lever and supply.
+    """
+    # One vertical stack of numbers, so nothing can drift out of register:
+    # rim -> seat -> lid -> the shelf the closed lid stops against -> tank.
+    RIM = 0.395
+    SEAT_T, LID_T = 0.019, 0.026
+    SHELF_Z = RIM + SEAT_T + LID_T + 0.007      # 0.447
+    TANK_Z, TLID_Z = SHELF_Z + 0.310, SHELF_Z + 0.340
+    HW, YB, YF = 0.185, -0.118, 0.352           # rim, at its widest: 0.47 long
+    SY = -0.254                                 # centre of tank/shelf in Y
+    WALL = -0.364                               # the tile face, in this frame
+    parts = []
+    rings = [
+        # skirt -> waisted ankle -> bowl.  The rim's outline sits forward of the
+        # skirt's, so the china tucks back under itself towards the wall the way
+        # a cast trapway does instead of standing on a straight lathed column.
+        _pan_ring(0.118, -0.290, 0.150, 0.000),
+        _pan_ring(0.112, -0.288, 0.144, 0.024),
+        _pan_ring(0.090, -0.280, 0.110, 0.130),
+        _pan_ring(0.100, -0.276, 0.138, 0.208),
+        _pan_ring(0.140, -0.240, 0.226, 0.284),
+        _pan_ring(0.174, -0.172, 0.314, 0.356),
+        # the top ring is repeated so the lip reads as a hard edge rather than
+        # rolling over into the flare below it
+        _pan_ring(HW, YB, YF, RIM - 0.014),
+        _pan_ring(HW, YB, YF, RIM),
+        # ...and back down the inside to the trap outlet
+        _pan_ring(0.152, YB + 0.022, 0.282, RIM - 0.004),
+        _pan_ring(0.132, YB + 0.038, 0.252, 0.347),
+        _pan_ring(0.102, YB + 0.064, 0.192, 0.282),
+        _pan_ring(0.064, YB + 0.098, 0.118, 0.228),
+        _pan_ring(0.032, YB + 0.122, 0.062, 0.202),
+    ]
+    pan = mlib.loft("R_WcPan", rings, close_v=True, cname=C,
                     cap_start=True, cap_end=True)
-    mlib.bevel(pan, 0.004, 2, 46)
-    mlib.smooth_shade(pan, 46)
-    mlib.set_mat(pan, M("M_Sanitary"))
-    out.append(pan)
+    mlib.smooth_shade(pan, 44)
+    parts.append(pan)
+    # The plinth the tank bolts down onto, lofted rather than boxed: narrow and
+    # deep where it grows out of the skirt, spreading at the top.  Deliberately
+    # narrower than the tank, so the tank overhangs it the way a real one does
+    # and there is somewhere underneath for the supply to land.
+    shelf = mlib.loft("R_WcShelf", [
+        # every ring flush with the tank's back face, so the plinth cannot
+        # creep out behind the tank and into the wall
+        [(x, y - 0.250, 0.170) for (x, y) in mlib.rounded_rect(0.196, 0.204, 0.046, 4)],
+        [(x, y - 0.246, 0.290) for (x, y) in mlib.rounded_rect(0.250, 0.212, 0.044, 4)],
+        [(x, y - 0.257, 0.396) for (x, y) in mlib.rounded_rect(0.310, 0.190, 0.036, 4)],
+        [(x, y - 0.264, SHELF_Z) for (x, y) in mlib.rounded_rect(0.330, 0.176, 0.030, 4)],
+    ], close_v=True, cname=C, cap_start=True, cap_end=True)
+    mlib.bevel(shelf, 0.008, 2, 52)
+    mlib.smooth_shade(shelf, 46)
+    parts.append(shelf)
+    # ...and the low flat between the rim and the plinth that the seat's hinge
+    # bolts pass through.  Without it the seat hinges onto thin air.
+    flat = mlib.prism("R_WcHFlat", mlib.rounded_rect(0.320, 0.090, 0.026, 3),
+                      0.320, RIM, C)
+    mlib.translate(flat, (0.0, -0.150, 0.0))
+    mlib.bevel(flat, 0.008, 2, 50)
+    parts.append(flat)
+    # tank, and its lid overhanging on every side
+    tank = mlib.prism("R_WcTank", mlib.rounded_rect(0.428, 0.196, 0.026, 4),
+                      SHELF_Z - 0.006, TANK_Z, C)
+    mlib.translate(tank, (0.0, SY, 0.0))
+    mlib.bevel(tank, 0.012, 3, 46)
+    parts.append(tank)
+    tlid = mlib.prism("R_WcTankLid",
+                      mlib.rounded_rect(0.452, 0.220, 0.030, 4), TANK_Z,
+                      TLID_Z, C)
+    mlib.translate(tlid, (0.0, SY, 0.0))
+    mlib.bevel(tlid, 0.009, 3, 46)
+    parts.append(tlid)
+    body = mlib.join(parts, "R_Wc", C)
+    mlib.set_mat(body, M("M_Sanitary"))
 
-    cist = mlib.rounded_box("R_Cistern", back - 0.205, wy - 0.222, 0.430,
-                            back, wy + 0.222, 0.800, r=0.026, cname=C)
-    mlib.bevel(cist, 0.005, 3, 40)
-    mlib.smooth_shade(cist, 34)
-    mlib.set_mat(cist, M("M_Sanitary"))
-    out.append(cist)
-    lid = mlib.rounded_box("R_CistLid", back - 0.218, wy - 0.234, 0.800,
-                           back, wy + 0.234, 0.824, r=0.014, cname=C)
-    mlib.bevel(lid, 0.004, 3, 40)
-    mlib.smooth_shade(lid, 34)
-    mlib.set_mat(lid, M("M_Sanitary"))
-    out.append(lid)
-    lv = mlib.rounded_box("R_CistLever", back - 0.226, wy - 0.150, 0.716,
-                          back - 0.196, wy - 0.116, 0.740, r=0.008, cname=C)
-    mlib.bevel(lv, 0.003, 2, 42)
-    mlib.set_mat(lv, M("M_BathChrome"))
-    out.append(lv)
+    # ------------------------------------------------------------ seat + lid
+    # Both follow the rim's OWN outline, so they overhang it by a constant few
+    # millimetres the whole way round instead of by an eyeballed offset.
+    plan = [(v[0], v[1]) for v in _pan_ring(HW, YB, YF, 0.0)]
+    cyw = YB + (YF - YB) * 0.38                 # the outline's own centre
 
-    # seat and lid: flattened oval rings, which is what they are
-    seat = props.torus("R_WcSeat", 0.176, 0.030, 44, 10, C,
-                       cx=wx, cy=wy, cz=0.412)
-    mlib.scale_mesh(seat, (1.11, 0.90, 0.42), pivot=(wx, wy, 0.412))
-    mlib.set_mat(seat, M("M_Sanitary"))
-    out.append(seat)
-    top = props.lathe("R_WcLid", [(0.0, 0.0), (0.150, 0.0), (0.190, 0.008),
-                                  (0.204, 0.020), (0.200, 0.030),
-                                  (0.150, 0.034), (0.0, 0.034)], 40, C)
-    mlib.scale_mesh(top, (1.11, 0.90, 1.0))
-    mlib.translate(top, (wx, wy, 0.424))
-    mlib.set_mat(top, M("M_Sanitary"))
-    out.append(top)
-    for s_ in (-1, 1):
-        hg = props.lathe("R_WcHinge%d" % (s_ > 0), [
-            (0.0, 0.0), (0.020, 0.0), (0.020, 0.030), (0.0, 0.032)], 14, C)
-        mlib.translate(hg, (wx + 0.150, wy + s_ * 0.072, 0.398))
-        mlib.set_mat(hg, M("M_BathChrome"))
-        out.append(hg)
+    def ring2d(k, dy=0.0):
+        return [(x * k, cyw + (y - cyw) * k + dy) for (x, y) in plan]
+
+    # The seat only just stands proud of the china - overhang it far enough to
+    # hide the rim and seat, lid and rim read as three stacked discs of the same
+    # thickness.  The lid is lofted with a slight dome so its edge tapers
+    # instead of showing as a second flat band under the first.
+    seat = mlib.prism("R_WcSeat", ring2d(1.008), RIM, RIM + SEAT_T, C)
+    hole = mlib.prism("R_WcSeatCut", ring2d(0.660, 0.030), RIM - 0.02,
+                      RIM + 0.06, C)
+    mlib.boolean(seat, hole)
+    mlib.bevel(seat, 0.006, 3, 46)
+    mlib.smooth_shade(seat, 40)
+    slid = mlib.loft("R_WcLid", [
+        [(x, y, RIM + SEAT_T) for (x, y) in ring2d(1.018)],
+        [(x, y, RIM + SEAT_T + LID_T * 0.62) for (x, y) in ring2d(1.014)],
+        [(x, y, RIM + SEAT_T + LID_T) for (x, y) in ring2d(0.930)],
+    ], close_v=True, cname=C, cap_start=True, cap_end=True)
+    mlib.bevel(slid, 0.008, 3, 52)
+    mlib.smooth_shade(slid, 44)
+    seatp = mlib.join([seat, slid], "R_WcSeatLid", C)
+    mlib.set_mat(seatp, M("M_Sanitary"))
+
+    # ------------------------------------------------------- chrome fittings
+    TKF = SY + 0.098                            # tank's front face
+    fit = []
+    # trip lever: escutcheon on the tank's left cheek and a lever raked down
+    esc = mlib.revolve("R_WcEsc", [(0.0, 0.0), (0.020, 0.0), (0.019, 0.014),
+                                   (0.010, 0.020), (0.0, 0.020)], 14, cname=C)
+    mlib.rot_x(esc, -math.pi / 2)
+    mlib.translate(esc, (-0.128, TKF - 0.004, TANK_Z - 0.072))
+    fit.append(esc)
+    fit.append(mlib.tube_along("R_WcLever",
+                               [(-0.128, TKF + 0.016, TANK_Z - 0.072),
+                                (-0.128, TKF + 0.024, TANK_Z - 0.074),
+                                (-0.052, TKF + 0.028, TANK_Z - 0.102)],
+                               mlib.rounded_rect(0.022, 0.008, 0.004, 2), C))
+    # angle stop screwed to the wall behind, and the supply up to the tank.
+    # It stands outboard of the tank lid so nothing is buried in the china.
+    stop = mlib.revolve("R_WcStop",
+                        [(0.0, 0.0), (0.022, 0.0), (0.022, 0.052),
+                         (0.030, 0.058), (0.030, 0.070), (0.0, 0.070)], 14,
+                        cname=C)
+    mlib.rot_x(stop, -math.pi / 2)          # flange on the plaster, body forward
+    mlib.translate(stop, (-0.242, WALL, 0.190))
+    fit.append(stop)
+    sup = mlib.bez((WALL + 0.068, 0.190), (WALL + 0.200, 0.198),
+                   (WALL + 0.160, 0.340), (WALL + 0.076, SHELF_Z - 0.024), n=10)
+    n = len(sup) - 1
+    fit.append(mlib.tube_along("R_WcSupply",
+                               [(-0.242 + 0.057 * (i / n), q[0], q[1])
+                                for i, q in enumerate(sup)],
+                               mlib.circle(0.0095, 10), C))
+    nut = mlib.revolve("R_WcNut", [(0.0, 0.0), (0.021, 0.0), (0.021, 0.030),
+                                   (0.0, 0.030)], 12, cname=C)
+    mlib.translate(nut, (-0.185, sup[-1][0], SHELF_Z - 0.034))
+    fit.append(nut)
+    # seat hinge: the two barrels that sit on the flat behind the seat
+    for sx in (-0.076, 0.076):
+        h = mlib.revolve("R_WcHinge", [(0.0, 0.0), (0.013, 0.0), (0.013, 0.054),
+                                       (0.0, 0.054)], 12, cname=C)
+        mlib.rot_y(h, math.pi / 2)
+        mlib.translate(h, (sx - 0.027, -0.150, RIM + 0.013))
+        fit.append(h)
+    fo = mlib.join(fit, "R_WcFittings", C)
+    mlib.smooth_shade(fo, 38)
+    mlib.set_mat(fo, M("M_BathChrome"))
+
+    # A quarter turn puts local +Y (the way it faces) onto world -X, which is
+    # into the room, and local -Y onto the east wall.  cx is set off the tank
+    # LID's back, not the tank's - the lid overhangs the cistern by 12 mm and
+    # it is the lid that would end up buried in the tiling.
+    face = L.BA_X[1] - TILE_F
+    cx, cy = face - 0.366, L.BA_WC[1]
+    out = [body, seatp, fo]
+    for o in out:
+        mlib.rotate_z(o, math.pi * 0.5)
+        mlib.translate(o, (cx, cy, BFL))
     return out
 
 
-def duck(cx, cy, cz, rot=0.0):
-    """The rubber duck, on the rim of the bath.
+def _duck_ring(px, pz, tx, tz, hw, dn, up, n=30):
+    """One section through the duck, held PERPENDICULAR to a curved spine.
 
-    It used to sit on the living-room floor beside the couch, where a yellow
-    blob 120 mm long with no bill and no eye reads as a vase somebody knocked
-    over.  On a bath rim, with a bill and an eye on it, it reads as what it is.
+    The section is a true ellipse whose centre is offset off the spine, so it
+    reaches `up` above and `dn` below it while staying smooth all the way
+    round.  Splitting the radius at the equator - an egg - creases along the
+    flank, which shows badly on moulded rubber.
+
+    Holding the section square to the spine is what lets one surface run from
+    the tail through the breast and up the neck into the head.  Built as three
+    solids butted together, the neck is a cylinder with its cap ring showing as
+    a hard collar between two lumps, which is exactly how it looked.
+    """
+    ux, uz = tz, -tx                       # spine tangent turned up
+    o, h = (up - dn) * 0.5, (up + dn) * 0.5
+    ring = []
+    for i in range(n):
+        a = math.tau * i / n
+        d = o + h * math.cos(a)
+        ring.append((px + ux * d, hw * math.sin(a), pz + uz * d))
+    return ring
+
+
+def duck(cx, cy, cz, rot=0.0):
+    """The rubber duck, on the cistern lid.
+
+    Body, neck and head are ONE lofted surface following a spine that runs
+    along the body and then turns up through the breast - which is the only way
+    the neck reads as part of the animal rather than as a pipe between two
+    balls.  The bill stays separate because it is a different colour, and a
+    seam is correct there.
     """
     out = []
-    body = props.sweep_var("R_Duck", [
-        (0.082, 0.0, 0.024), (0.058, 0.0, 0.044), (0.014, 0.0, 0.052),
-        (-0.030, 0.0, 0.046), (-0.056, 0.0, 0.048), (-0.064, 0.0, 0.068),
-        (-0.058, 0.0, 0.090), (-0.042, 0.0, 0.100), (-0.030, 0.0, 0.098)],
-        [(0.014, 0.011), (0.040, 0.032), (0.050, 0.044), (0.041, 0.042),
-         (0.030, 0.032), (0.025, 0.026), (0.022, 0.023), (0.019, 0.020),
-         (0.012, 0.012)], 18, C, smooth=64)
+    # (spine x, spine z, half width, below the spine, above it)
+    # A rubber duck's tail is a short blunt flick, not a fin: run it out to
+    # 64 mm on a 4 mm tip and the body finishes in a long swept blade.
+    prof = [(0.050, 0.058, 0.007, 0.007, 0.006),     # tail tip
+            (0.041, 0.051, 0.019, 0.016, 0.013),
+            (0.028, 0.041, 0.030, 0.025, 0.021),
+            (0.014, 0.033, 0.037, 0.030, 0.024),
+            (-0.006, 0.030, 0.040, 0.028, 0.025),    # beam, at the waterline
+            (-0.024, 0.033, 0.038, 0.027, 0.024),
+            (-0.038, 0.043, 0.032, 0.023, 0.022),    # breast, turning up
+            (-0.046, 0.059, 0.025, 0.020, 0.019),
+            (-0.050, 0.075, 0.022, 0.018, 0.018),    # neck
+            (-0.053, 0.089, 0.026, 0.024, 0.024),    # head swelling out
+            (-0.055, 0.101, 0.029, 0.028, 0.027),
+            (-0.055, 0.112, 0.022, 0.020, 0.020),
+            (-0.054, 0.120, 0.009, 0.008, 0.008)]    # crown
+    rings = []
+    for k, (px, pz, hw, dn, up) in enumerate(prof):
+        a = prof[max(k - 1, 0)]
+        b = prof[min(k + 1, len(prof) - 1)]
+        tx, tz = b[0] - a[0], b[1] - a[1]
+        ln = math.hypot(tx, tz) or 1.0
+        rings.append(_duck_ring(px, pz, tx / ln, tz / ln, hw, dn, up))
+    body = mlib.loft("R_Duck", rings, close_v=True, cname=C,
+                     cap_start=True, cap_end=True)
+    mlib.smooth_shade(body, 70)
     mlib.set_mat(body, M("M_DuckYellow"))
     out.append(body)
-    bill = props.sweep_var("R_DuckBill", [
-        (-0.040, 0.0, 0.086), (-0.064, 0.0, 0.082), (-0.084, 0.0, 0.079),
-        (-0.094, 0.0, 0.078)],
-        [(0.017, 0.011), (0.019, 0.009), (0.016, 0.006), (0.010, 0.004)],
-        14, C, smooth=64)
+    # the bill: FLAT and wide, not a cone - rounded rectangles on their side
+    bill_prof = [(-0.068, 0.031, 0.017, 0.006, 0.0985),
+                 (-0.086, 0.037, 0.014, 0.005, 0.0968),
+                 (-0.100, 0.035, 0.011, 0.004, 0.0952),
+                 (-0.112, 0.026, 0.009, 0.004, 0.0940),
+                 (-0.119, 0.011, 0.006, 0.002, 0.0933)]
+    bill = mlib.loft("R_DuckBill", [
+        [(x, a, zc + b) for (a, b) in mlib.rounded_rect(w, h, r, 4)]
+        for (x, w, h, r, zc) in bill_prof],
+        close_v=True, cname=C, cap_start=True, cap_end=True)
+    mlib.bevel(bill, 0.0012, 2, 52)
+    mlib.smooth_shade(bill, 58)
     mlib.set_mat(bill, M("M_DuckBill"))
     out.append(bill)
     for s_ in (-1, 1):
         ey = props.lathe("R_DuckEye%d" % (s_ > 0), [
-            (0.0, 0.0), (0.005, 0.001), (0.005, 0.004), (0.0, 0.005)], 10, C)
-        props.face_y(ey, s_ * 1.0, (-0.046, s_ * 0.017, 0.094))
+            (0.0, 0.0), (0.0035, 0.0), (0.0055, 0.003), (0.0050, 0.006),
+            (0.0, 0.007)], 12, C)
+        props.face_y(ey, s_ * 1.0, (-0.058, s_ * 0.024, 0.105))
         mlib.set_mat(ey, M("M_DuckEye"))
         out.append(ey)
     for o in out:
@@ -669,7 +836,11 @@ def bathroom():
     # the tub runs along the north wall; BA_TUB_Y is only its own depth, so it
     # is squared up against the wall here
     ty0, ty1 = L.BA_Y[1] - 0.735, L.BA_Y[1]
-    top = 0.560
+    # Everything in this room stands on the bathroom's TILE, which is 14.5 mm
+    # proud of the parquet datum the rest of the flat is set out from.  Left on
+    # z = 0 - the number every other room uses for its floor - the bath's foot
+    # and the WC's skirt sink into the tiling by its own thickness.
+    top = TUBH + BFL
 
     # The bath, lofted from its foot up over the rim and back down into the
     # well as one surface.  It used to be a solid rounded box with a SECOND
@@ -677,17 +848,17 @@ def bathroom():
     # and the inner block was geometry nothing could ever see.
     cx, cy = (tx0 + tx1) * 0.5, (ty0 + ty1) * 0.5
     W, D = tx1 - tx0, ty1 - ty0
-    tub_prof = [(W - 0.052, D - 0.052, 0.048, 0.004),
-                (W - 0.006, D - 0.010, 0.058, 0.090),
-                (W, D, 0.066, 0.300),
-                (W, D, 0.066, top - 0.012),
-                (W - 0.003, D - 0.003, 0.066, top),
-                (W - 0.150, D - 0.146, 0.100, top - 0.010),
-                (W - 0.172, D - 0.166, 0.110, top - 0.082),
-                (W - 0.240, D - 0.216, 0.140, 0.226),
-                (W - 0.370, D - 0.296, 0.150, 0.136),
-                (W - 0.530, D - 0.376, 0.150, 0.116)]
-    rings = [[(cx + a, cy + b, zz)
+    tub_prof = [(W - 0.052, D - 0.052, 0.048, 0.000),
+                (W - 0.006, D - 0.010, 0.058, 0.086),
+                (W, D, 0.066, 0.296),
+                (W, D, 0.066, TUBH - 0.012),
+                (W - 0.003, D - 0.003, 0.066, TUBH),
+                (W - 0.150, D - 0.146, 0.100, TUBH - 0.010),
+                (W - 0.172, D - 0.166, 0.110, TUBH - 0.082),
+                (W - 0.240, D - 0.216, 0.140, 0.222),
+                (W - 0.370, D - 0.296, 0.150, 0.132),
+                (W - 0.530, D - 0.376, 0.150, 0.112)]
+    rings = [[(cx + a, cy + b, zz + BFL)
               for (a, b) in mlib.rounded_rect(ww, dd, r, 6)]
              for (ww, dd, r, zz) in tub_prof]
     shell = mlib.loft("R_TubBody", rings, close_u=False, close_v=True, cname=C,
@@ -698,7 +869,7 @@ def bathroom():
     out.append(shell)
     wst = props.lathe("R_TubWaste", [(0.0, 0.0), (0.026, 0.0), (0.026, 0.004),
                                      (0.0, 0.004)], 18, C)
-    mlib.translate(wst, (tx0 + 0.24, cy, 0.118))
+    mlib.translate(wst, (tx0 + 0.24, cy, 0.114 + BFL))
     mlib.set_mat(wst, M("M_BathChrome"))
     out.append(wst)
 
@@ -747,7 +918,10 @@ def bathroom():
 
     out += vanity()
     out += wc()
-    out += duck(L.BA_X[1] - 0.135, L.BA_WC[1] + 0.128, 0.824, rot=22.0)
+    # on the cistern lid, turned along it - the lid is only 220 deep and the
+    # duck is 170 long, so across the lid it would overhang both edges
+    out += duck(L.BA_X[1] - TILE_F - 0.145, L.BA_WC[1] + 0.080, 0.787,
+                rot=104.0)
 
     # ---- soft goods.  A bathroom without towels reads as a showroom -------
     # The rail goes on the WEST wall beside the bath, not on the door wall -
@@ -796,7 +970,7 @@ def bathroom():
     rnd = random.Random(67)
     for i, mt in enumerate(("M_BottleA", "M_BottleB", "M_BottleC")):
         bt = props.bottle("R_TubBot%d" % i, tx1 - 0.46 + i * 0.076,
-                          ry, 0.551, r=0.024,
+                          ry, top - 0.009, r=0.024,
                           h=rnd.uniform(0.120, 0.175), neck=0.009, cname=C)
         mlib.set_mat(bt, M(mt))
         out.append(bt)

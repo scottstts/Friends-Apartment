@@ -12,6 +12,13 @@ import * as P from './props'
 const add=(world:World,md:MeshData,material:THREE.Material,collide=false):MeshData=>world.add(md,material,{collide})
 const rounded=(x0:number,y0:number,z0:number,x1:number,y1:number,z1:number,r=0.012):MeshData=>mlib.bevel(mlib.box(x0,y0,z0,x1,y1,z1),r,3)
 
+// f_beds.py: nothing hung on a bathroom wall sits on the wall LINE (tiling is
+// 13 mm proud), and everything in the room stands on the tile top, 14.5 mm
+// proud of the parquet datum the rest of the flat is set out from.
+const TILE_F=0.013
+const BFL=0.0145
+const TUBH=0.56
+
 function buildMaterials():void {
   M.wood('M_BedWood',['6A4526','8C6236','4A2C16'],{ring:26,axis:'X',rough:[0.26,0.48],coat:0.26,grainRelief:0.1,scale:1.4})
   M.wood('M_BedWood2',['3E2A1C','5C4026','281810'],{ring:30,axis:'Y',rough:[0.28,0.5],coat:0.22,grainRelief:0.1,scale:1.4})
@@ -149,37 +156,155 @@ function buildVanity(world:World):void {
   const [frame,mirror]=P.frameArt(1,0.78,0.03,0.038,0.008,0.019);P.wallPlace([frame,mirror],'E',by,1.52,L.BA_X[1]);add(world,frame,M.get('M_VanityPaint'));add(world,mirror,M.get('M_MirrorGlass'))
 }
 
+/** f_beds.py _pan_ring: an EGG section, widest `waist` of the way from the back. */
+function panRing(hw:number,yb:number,yf:number,z:number,n=44,waist=0.38):Vec3[] {
+  const cy=yb+(yf-yb)*waist
+  const ring:Vec3[]=[]
+  for(let i=0;i<n;i++){
+    const a=Math.PI*2*i/n,c=Math.cos(a)
+    ring.push([hw*Math.sin(a),c>=0?cy+(yf-cy)*c:cy+(cy-yb)*c,z])
+  }
+  return ring
+}
+
 function buildWc(world:World):void {
-  const [wx,wy]=L.BA_WC,back=L.BA_X[1]-0.009
-  const specs:[number,number,number,number,number][]=[[0.235,0.29,0.055,0.006,0.105],[0.215,0.262,0.055,0.088,0.092],[0.232,0.256,0.06,0.172,0.056],[0.286,0.282,0.075,0.256,0.024],[0.346,0.312,0.09,0.332,0.008],[0.386,0.332,0.105,0.38,0],[0.394,0.338,0.108,0.396,0],[0.352,0.3,0.098,0.39,0],[0.318,0.272,0.09,0.338,0.002],[0.268,0.228,0.078,0.288,0.008],[0.188,0.164,0.058,0.248,0.016],[0.086,0.076,0.03,0.23,0.022]]
-  const rings=specs.map(([dy,dx,r,z,ox])=>mlib.roundedRect(dy,dx,r,5).map(([y,x])=>[wx+ox+x,wy+y,z] as Vec3))
-  const pan=mlib.loft(rings,{closeV:true,capStart:true,capEnd:true});mlib.smoothShade(pan,46);add(world,pan,M.get('M_Sanitary'),true)
-  add(world,rounded(back-0.205,wy-0.222,0.43,back,wy+0.222,0.8,0.026),M.get('M_Sanitary'))
-  add(world,rounded(back-0.218,wy-0.234,0.8,back,wy+0.234,0.824,0.014),M.get('M_Sanitary'))
-  const seat=P.torus(0.176,0.03,44,10,[wx,wy,0.412]);mlib.scaleMesh(seat,[1.11,0.9,0.42],[wx,wy,0.412]);add(world,seat,M.get('M_Sanitary'))
-  const lid=P.lathe([[0,0],[0.15,0],[0.19,0.008],[0.204,0.02],[0.2,0.03],[0.15,0.034],[0,0.034]],40);mlib.scaleMesh(lid,[1.11,0.9,1]);add(world,mlib.translate(lid,[wx,wy,0.424]),M.get('M_Sanitary'))
+  const RIM=0.395,SEAT_T=0.019,LID_T=0.026
+  const SHELF_Z=RIM+SEAT_T+LID_T+0.007
+  const TANK_Z=SHELF_Z+0.31,TLID_Z=SHELF_Z+0.34
+  const HW=0.185,YB=-0.118,YF=0.352
+  const SY=-0.254,WALL=-0.364
+  const rings=[
+    panRing(0.118,-0.29,0.15,0),
+    panRing(0.112,-0.288,0.144,0.024),
+    panRing(0.09,-0.28,0.11,0.13),
+    panRing(0.1,-0.276,0.138,0.208),
+    panRing(0.14,-0.24,0.226,0.284),
+    panRing(0.174,-0.172,0.314,0.356),
+    panRing(HW,YB,YF,RIM-0.014),
+    panRing(HW,YB,YF,RIM),
+    panRing(0.152,YB+0.022,0.282,RIM-0.004),
+    panRing(0.132,YB+0.038,0.252,0.347),
+    panRing(0.102,YB+0.064,0.192,0.282),
+    panRing(0.064,YB+0.098,0.118,0.228),
+    panRing(0.032,YB+0.122,0.062,0.202),
+  ]
+  const pan=mlib.loft(rings,{closeV:true,capStart:true,capEnd:true});mlib.smoothShade(pan,44)
+  const shelf=mlib.loft([
+    mlib.roundedRect(0.196,0.204,0.046,4).map(([x,y])=>[x,y-0.25,0.17] as Vec3),
+    mlib.roundedRect(0.25,0.212,0.044,4).map(([x,y])=>[x,y-0.246,0.29] as Vec3),
+    mlib.roundedRect(0.31,0.19,0.036,4).map(([x,y])=>[x,y-0.257,0.396] as Vec3),
+    mlib.roundedRect(0.33,0.176,0.03,4).map(([x,y])=>[x,y-0.264,SHELF_Z] as Vec3),
+  ],{closeV:true,capStart:true,capEnd:true})
+  mlib.bevel(shelf,0.008,2);mlib.smoothShade(shelf,46)
+  const flat=mlib.prism(mlib.roundedRect(0.32,0.09,0.026,3),0.32,RIM);mlib.translate(flat,[0,-0.15,0]);mlib.bevel(flat,0.008,2)
+  const tank=mlib.prism(mlib.roundedRect(0.428,0.196,0.026,4),SHELF_Z-0.006,TANK_Z);mlib.translate(tank,[0,SY,0]);mlib.bevel(tank,0.012,3)
+  const tlid=mlib.prism(mlib.roundedRect(0.452,0.22,0.03,4),TANK_Z,TLID_Z);mlib.translate(tlid,[0,SY,0]);mlib.bevel(tlid,0.009,3)
+  const body=mlib.join([pan,shelf,flat,tank,tlid])
+  // Seat and lid follow the rim's own outline (constant overhang all round).
+  const plan=panRing(HW,YB,YF,0).map((v)=>[v[0],v[1]] as Vec2)
+  const cyw=YB+(YF-YB)*0.38
+  const ring2d=(k:number,dy=0):Vec2[]=>plan.map(([x,y])=>[x*k,cyw+(y-cyw)*k+dy] as Vec2)
+  const seat=mlib.annularPrism(ring2d(1.008),ring2d(0.66,0.03),RIM,RIM+SEAT_T,0.006,3);mlib.smoothShade(seat,40)
+  const slid=mlib.loft([
+    ring2d(1.018).map(([x,y])=>[x,y,RIM+SEAT_T] as Vec3),
+    ring2d(1.014).map(([x,y])=>[x,y,RIM+SEAT_T+LID_T*0.62] as Vec3),
+    ring2d(0.93).map(([x,y])=>[x,y,RIM+SEAT_T+LID_T] as Vec3),
+  ],{closeV:true,capStart:true,capEnd:true})
+  mlib.bevel(slid,0.008,3);mlib.smoothShade(slid,44)
+  const seatLid=mlib.join([seat,slid])
+  const TKF=SY+0.098
+  const esc=mlib.revolve([[0,0],[0.02,0],[0.019,0.014],[0.01,0.02],[0,0.02]],14);mlib.rotX(esc,-Math.PI*0.5);mlib.translate(esc,[-0.128,TKF-0.004,TANK_Z-0.072])
+  const lever=mlib.tubeAlong([[-0.128,TKF+0.016,TANK_Z-0.072],[-0.128,TKF+0.024,TANK_Z-0.074],[-0.052,TKF+0.028,TANK_Z-0.102]],mlib.roundedRect(0.022,0.008,0.004,2))
+  const stop=mlib.revolve([[0,0],[0.022,0],[0.022,0.052],[0.03,0.058],[0.03,0.07],[0,0.07]],14);mlib.rotX(stop,-Math.PI*0.5);mlib.translate(stop,[-0.242,WALL,0.19])
+  const sup=mlib.bez([WALL+0.068,0.19],[WALL+0.2,0.198],[WALL+0.16,0.34],[WALL+0.076,SHELF_Z-0.024],10)
+  const last=sup.length-1
+  const supply=mlib.tubeAlong(sup.map(([sy,sz],i)=>[-0.242+0.057*(i/last),sy,sz] as Vec3),mlib.circle(0.0095,10))
+  const nut=mlib.revolve([[0,0],[0.021,0],[0.021,0.03],[0,0.03]],12);mlib.translate(nut,[-0.185,sup[last][0],SHELF_Z-0.034])
+  const fittings=[esc,lever,stop,supply,nut]
+  for(const sx of [-0.076,0.076]){
+    const hinge=mlib.revolve([[0,0],[0.013,0],[0.013,0.054],[0,0.054]],12)
+    mlib.rotY(hinge,Math.PI*0.5);mlib.translate(hinge,[sx-0.027,-0.15,RIM+0.013]);fittings.push(hinge)
+  }
+  const chrome=mlib.join(fittings);mlib.smoothShade(chrome,38)
+  // Quarter turn faces local +Y into the room (-X), tank against the tiles;
+  // cx clears the tank LID's back, which overhangs the cistern by 12 mm.
+  const cx=L.BA_X[1]-TILE_F-0.366,cy=L.BA_WC[1]
+  for(const [md,material,collide] of [[body,'M_Sanitary',true],[seatLid,'M_Sanitary',false],[chrome,'M_BathChrome',false]] as const){
+    mlib.rotateZ(md,Math.PI*0.5);mlib.translate(md,[cx,cy,BFL]);add(world,md,M.get(material),collide)
+  }
 }
 
 function buildTub(world:World):void {
-  const [x0,x1]=L.BA_TUB_X,y1=L.BA_Y[1],y0=y1-0.735,top=0.56,cx=(x0+x1)*0.5,cy=(y0+y1)*0.5,width=x1-x0,depth=y1-y0
-  const profile:[number,number,number,number][]=[[width-0.052,depth-0.052,0.048,0.004],[width-0.006,depth-0.01,0.058,0.09],[width,depth,0.066,0.3],[width,depth,0.066,top-0.012],[width-0.003,depth-0.003,0.066,top],[width-0.15,depth-0.146,0.1,top-0.01],[width-0.172,depth-0.166,0.11,top-0.082],[width-0.24,depth-0.216,0.14,0.226],[width-0.37,depth-0.296,0.15,0.136],[width-0.53,depth-0.376,0.15,0.116]]
-  const rings=profile.map(([w,d,r,z])=>mlib.roundedRect(w,d,r,6).map(([x,y])=>[cx+x,cy+y,z] as Vec3))
+  // The tub stands on the bathroom tile: profile z is off its own underside,
+  // the whole shell lifted by BFL, rim-mounted fittings riding on `top`.
+  const [x0,x1]=L.BA_TUB_X,y1=L.BA_Y[1],y0=y1-0.735,top=TUBH+BFL,cx=(x0+x1)*0.5,cy=(y0+y1)*0.5,width=x1-x0,depth=y1-y0
+  const profile:[number,number,number,number][]=[[width-0.052,depth-0.052,0.048,0],[width-0.006,depth-0.01,0.058,0.086],[width,depth,0.066,0.296],[width,depth,0.066,TUBH-0.012],[width-0.003,depth-0.003,0.066,TUBH],[width-0.15,depth-0.146,0.1,TUBH-0.01],[width-0.172,depth-0.166,0.11,TUBH-0.082],[width-0.24,depth-0.216,0.14,0.222],[width-0.37,depth-0.296,0.15,0.132],[width-0.53,depth-0.376,0.15,0.112]]
+  const rings=profile.map(([w,d,r,z])=>mlib.roundedRect(w,d,r,6).map(([x,y])=>[cx+x,cy+y,z+BFL] as Vec3))
   const tub=mlib.loft(rings,{closeV:true,capStart:true,capEnd:true});mlib.smoothShade(tub,44);add(world,tub,M.get('M_Sanitary'),true)
+  add(world,mlib.translate(P.lathe([[0,0],[0.026,0],[0.026,0.004],[0,0.004]],18),[x0+0.24,cy,0.114+BFL]),M.get('M_BathChrome'))
   add(world,mlib.translate(P.lathe([[0,0],[0.04,0],[0.038,0.014],[0.02,0.03],[0.019,0.09],[0.026,0.098],[0,0.1]],18),[x0+0.24,y1-0.036,top-0.006]),M.get('M_BathChrome'))
   add(world,mlib.tubeAlong([[x0+0.24,y1-0.036,top+0.078],[x0+0.24,y1-0.13,top+0.086],[x0+0.24,y1-0.18,top+0.052]],mlib.circle(0.017,10)),M.get('M_BathChrome'))
   add(world,mlib.tubeAlong([[x0+0.24,y1-0.03,top+0.05],[x0+0.24,y1-0.03,1.96],[x0+0.24,y1-0.15,2.02]],mlib.circle(0.012,10)),M.get('M_BathChrome'))
   add(world,P.rod([x0-0.01,y0+0.03,2.06],[x1+0.01,y0+0.03,2.06],0.013,12),M.get('M_BathChrome'))
   add(world,P.drape(x0+0.02,x1-0.02,y0+0.03,0.32,2.03,{folds:9,amplitude:0.038,nz:14,seed:13}),M.get('M_ShowerCurtain'))
   const bathMat=P.rug(cx,y0-0.42,0.78,0.52,()=>0,{cell:0.03,thickness:0.016,pile:0.0022,z0:0.017});add(world,bathMat,M.get('M_BathMat'))
-  for(const [i,material] of ['M_BottleA','M_BottleB','M_BottleC'].entries())add(world,P.bottle(x1-0.46+i*0.076,y1-0.044,0.551,0.024,0.13+i*0.018,0.009),M.get(material))
+  for(const [i,material] of ['M_BottleA','M_BottleB','M_BottleC'].entries())add(world,P.bottle(x1-0.46+i*0.076,y1-0.044,top-0.009,0.024,0.13+i*0.018,0.009),M.get(material))
+}
+
+/** f_beds.py _duck_ring: a true ellipse held perpendicular to the spine,
+ * centre offset so it reaches `up` above and `dn` below while staying smooth. */
+function duckRing(px:number,pz:number,tx:number,tz:number,hw:number,dn:number,up:number,n=30):Vec3[] {
+  const ux=tz,uz=-tx
+  const o=(up-dn)*0.5,h=(up+dn)*0.5
+  const ring:Vec3[]=[]
+  for(let i=0;i<n;i++){
+    const a=Math.PI*2*i/n,d=o+h*Math.cos(a)
+    ring.push([px+ux*d,hw*Math.sin(a),pz+uz*d])
+  }
+  return ring
 }
 
 function buildDuck(world:World):void {
-  const cx=L.BA_X[1]-0.135,cy=L.BA_WC[1]+0.128,cz=0.824,angle=22*Math.PI/180
-  const parts:[[MeshData,string],[MeshData,string]]=[
-    [P.sweepVar([[0.082,0,0.024],[0.058,0,0.044],[0.014,0,0.052],[-0.03,0,0.046],[-0.056,0,0.048],[-0.064,0,0.068],[-0.058,0,0.09],[-0.042,0,0.1],[-0.03,0,0.098]],[[0.014,0.011],[0.04,0.032],[0.05,0.044],[0.041,0.042],[0.03,0.032],[0.025,0.026],[0.022,0.023],[0.019,0.02],[0.012,0.012]],18),'M_DuckYellow'],
-    [P.sweepVar([[-0.04,0,0.086],[-0.064,0,0.082],[-0.084,0,0.079],[-0.094,0,0.078]],[[0.017,0.011],[0.019,0.009],[0.016,0.006],[0.01,0.004]],14),'M_DuckBill'],
+  // On the cistern lid, turned along it (the lid is 220 deep, the duck 170 long).
+  const cx=L.BA_X[1]-TILE_F-0.145,cy=L.BA_WC[1]+0.08,cz=0.787,angle=104*Math.PI/180
+  // (spine x, spine z, half width, below the spine, above it)
+  const prof:[number,number,number,number,number][]=[
+    [0.05,0.058,0.007,0.007,0.006],
+    [0.041,0.051,0.019,0.016,0.013],
+    [0.028,0.041,0.03,0.025,0.021],
+    [0.014,0.033,0.037,0.03,0.024],
+    [-0.006,0.03,0.04,0.028,0.025],
+    [-0.024,0.033,0.038,0.027,0.024],
+    [-0.038,0.043,0.032,0.023,0.022],
+    [-0.046,0.059,0.025,0.02,0.019],
+    [-0.05,0.075,0.022,0.018,0.018],
+    [-0.053,0.089,0.026,0.024,0.024],
+    [-0.055,0.101,0.029,0.028,0.027],
+    [-0.055,0.112,0.022,0.02,0.02],
+    [-0.054,0.12,0.009,0.008,0.008],
   ]
+  const rings=prof.map(([px,pz,hw,dn,up],k)=>{
+    const a=prof[Math.max(k-1,0)],b=prof[Math.min(k+1,prof.length-1)]
+    const tx=b[0]-a[0],tz=b[1]-a[1],ln=Math.hypot(tx,tz)||1
+    return duckRing(px,pz,tx/ln,tz/ln,hw,dn,up)
+  })
+  const body=mlib.loft(rings,{closeV:true,capStart:true,capEnd:true});mlib.smoothShade(body,70)
+  // The bill: flat and wide, rounded rectangles on their side.
+  const billProf:[number,number,number,number,number][]=[
+    [-0.068,0.031,0.017,0.006,0.0985],
+    [-0.086,0.037,0.014,0.005,0.0968],
+    [-0.1,0.035,0.011,0.004,0.0952],
+    [-0.112,0.026,0.009,0.004,0.094],
+    [-0.119,0.011,0.006,0.002,0.0933],
+  ]
+  const bill=mlib.loft(billProf.map(([x,w,h,r,zc])=>mlib.roundedRect(w,h,r,4).map(([a,b])=>[x,a,zc+b] as Vec3)),{closeV:true,capStart:true,capEnd:true})
+  mlib.bevel(bill,0.0012,2);mlib.smoothShade(bill,58)
+  const parts:[MeshData,string][]=[[body,'M_DuckYellow'],[bill,'M_DuckBill']]
+  for(const s of [-1,1]){
+    const eye=P.lathe([[0,0],[0.0035,0],[0.0055,0.003],[0.005,0.006],[0,0.007]],12)
+    P.faceY(eye,s,[-0.058,s*0.024,0.105])
+    parts.push([eye,'M_DuckEye'])
+  }
   for(const [md,material] of parts){mlib.rotateZ(md,angle);mlib.translate(md,[cx,cy,cz]);add(world,md,M.get(material))}
 }
 
