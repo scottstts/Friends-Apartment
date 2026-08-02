@@ -7,14 +7,16 @@
  * right - below the episode-title lockup and the six logo dots.  While the
  * scene builds the dots pulse; when the game is ready the dots settle, a
  * band of hallway light passes over each door and the underlight warms
- * beneath 20.  A hovered door leans forward; choosing 20 swings it open and
- * the hallway falls through onto the live canvas (19 waits, dim, until its
- * apartment exists).  Walking back to the front door in game returns to this
+ * beneath both apartments. A hovered door leans forward; the chosen door
+ * swings open and the hallway falls through onto its apartment scene.
+ * Walking back to the front door in game returns to this
  * landing.  Pause is the ornate doorbell over the frozen frame; the
  * unsupported-browser page hangs the peephole-frame art over the door. */
 
+import type { ApartmentId } from '../apartments/types'
+
 export interface UiHooks {
-  onEnter: () => void
+  onEnter: (apartment: ApartmentId) => void
   onResume: () => void
 }
 
@@ -105,9 +107,7 @@ canvas { display: block; }
 .intro .door { transition: transform 0.5s cubic-bezier(0.22, 0.61, 0.36, 1); }
 .doorway.left .door { transform-origin: right center; transform: rotateY(13deg); }
 .doorway.right .door { transform-origin: left center; transform: rotateY(-13deg); will-change: transform; }
-/* Nobody home across the hall yet. */
-.door.d19 { filter: brightness(0.88) saturate(0.92); }
-.d20 { outline: none; }
+.d19, .d20 { outline: none; }
 /* Ready: the hallway light passes over each door once. */
 .intro .door::after {
   content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0;
@@ -188,9 +188,9 @@ h1 { margin: 0; }
 .enter { position: absolute; left: 0; right: 0; top: calc(50% - 0.95em); text-align: center; pointer-events: none; }
 .ready .enter { opacity: 0.92; transform: none; }
 .ready .enter::after { transform: scaleX(1); }
-.intro.ready .d20 { cursor: pointer; }
+.intro.ready .d19, .intro.ready .d20 { cursor: pointer; }
 .pause:hover .cta, .pause:focus-visible .cta { color: #f7d98d; opacity: 1; }
-.intro.ready .d20:hover .underlight { opacity: 0.95; }
+.intro.ready .door:hover .underlight { opacity: 0.95; }
 /* A hovered door leans forward off its hinge - hover only, so the keyboard
  * focus parked on 20 never enlarges it by itself. */
 .intro.ready .doorway.left .door:hover { transform: rotateY(13deg) scale(1.045); }
@@ -211,10 +211,16 @@ h1 { margin: 0; }
 .fatal .msg { animation: rise 0.95s cubic-bezier(0.16, 0.7, 0.24, 1) 0.22s both; }
 @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 
-/* ---- door 20 opening onto the scene ---- */
+/* ---- chosen apartment door opening onto its scene ---- */
 .intro.open { pointer-events: none; }
 .intro.open .hall { transform: scale(2.1); opacity: 0; }
-.intro.open .doorway.right .door {
+.intro.open19 .hall { transform-origin: calc(50% - var(--dh) * 0.375) 58%; }
+.intro.open20 .hall { transform-origin: calc(50% + var(--dh) * 0.375) 58%; }
+.intro.open19 .doorway.left .door {
+  transform: rotateY(87deg);
+  transition: transform 1.18s cubic-bezier(0.68, 0.03, 0.22, 0.99);
+}
+.intro.open20 .doorway.right .door {
   transform: rotateY(-87deg);
   transition: transform 1.18s cubic-bezier(0.68, 0.03, 0.22, 0.99);
 }
@@ -244,7 +250,8 @@ h1 { margin: 0; }
   .intro .dots i, .intro .door::after, .veil.pause .stack, .pause:hover .bell svg { animation: none !important; }
   .intro .hall { transition: opacity 0.45s ease; }
   .intro.open .hall { transform: none; opacity: 0; }
-  .intro.open .doorway.right .door { transform: rotateY(-13deg); transition: none; }
+  .intro.open19 .doorway.left .door { transform: rotateY(13deg); transition: none; }
+  .intro.open20 .doorway.right .door { transform: rotateY(-13deg); transition: none; }
 }
 `
 
@@ -333,13 +340,13 @@ function reducedMotion(): boolean {
 export class Ui {
   private intro: HTMLDivElement
   private pause: HTMLDivElement
-  /** Door 20 - the only wired door until apartment 19 exists. */
-  private enterDoor: HTMLElement
+  private enterDoors: Record<ApartmentId, HTMLElement>
   private hooks: UiHooks
   private isReady = false
   private opened = false
   private entered = false
   private hideTimer = 0
+  private selected: ApartmentId = '20'
 
   constructor(hooks: UiHooks) {
     this.hooks = hooks
@@ -354,11 +361,13 @@ export class Ui {
             <div class="dots"><i></i><i></i><i></i><i></i><i></i><i></i></div>
           </header>
           <div class="doors">
-            <div class="doorway left" aria-hidden="true">
-              <div class="door d19">
+            <div class="doorway left">
+              <div class="door d19" role="button" tabindex="0" aria-label="Enter apartment 19">
                 <div class="grain"></div>
                 <div class="molding"></div>
                 <span class="doornum">19</span>
+                <div class="underlight"></div>
+                <div class="doorshade"></div>
               </div>
             </div>
             <p class="cta enter" aria-hidden="true">Enter</p>
@@ -374,10 +383,17 @@ export class Ui {
           </div>
         </div>
       </div>`)
-    this.enterDoor = this.intro.querySelector('.d20') as HTMLElement
-    activate(this.enterDoor, () => {
-      if (this.isReady && !this.opened) this.hooks.onEnter()
-    })
+    this.enterDoors = {
+      '19': this.intro.querySelector('.d19') as HTMLElement,
+      '20': this.intro.querySelector('.d20') as HTMLElement,
+    }
+    for (const id of ['19', '20'] as const) {
+      activate(this.enterDoors[id], () => {
+        if (!this.isReady || this.opened) return
+        this.selected = id
+        this.hooks.onEnter(id)
+      })
+    }
     document.body.appendChild(this.intro)
 
     this.pause = build(`
@@ -396,7 +412,7 @@ export class Ui {
   ready(): void {
     this.isReady = true
     this.intro.classList.add('ready')
-    this.enterDoor.focus({ preventScroll: true })
+    this.enterDoors[this.selected].focus({ preventScroll: true })
   }
 
   enterGame(): void {
@@ -405,11 +421,11 @@ export class Ui {
     this.opened = true
     this.entered = true
     if (this.isReady) {
-      // Swing door 20 open and fall through it, then drop the veil entirely.
+      // Swing the selected door open and fall through it, then drop the veil.
       // Blur first: a keyboard entry would otherwise hold :focus-visible,
       // whose straightened hover pose outranks the swing.
-      this.enterDoor.blur()
-      this.intro.classList.add('open')
+      this.enterDoors[this.selected].blur()
+      this.intro.classList.add('open', `open${this.selected}`)
       this.hideTimer = window.setTimeout(() => {
         this.intro.style.display = 'none'
       }, reducedMotion() ? OPEN_MS_REDUCED : OPEN_MS)
@@ -426,9 +442,9 @@ export class Ui {
     this.hidePause()
     window.clearTimeout(this.hideTimer)
     this.opened = false
-    this.intro.classList.remove('open')
+    this.intro.classList.remove('open', 'open19', 'open20')
     this.intro.style.display = ''
-    if (this.isReady) this.enterDoor.focus({ preventScroll: true })
+    if (this.isReady) this.enterDoors[this.selected].focus({ preventScroll: true })
   }
 
   showPause(): void {

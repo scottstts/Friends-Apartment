@@ -14,6 +14,7 @@
  * rest exactly over each authored seating area. */
 import type * as THREE from 'three/webgpu'
 import * as L from '../lib/L'
+import type { ApartmentInteractions } from '../apartments/types'
 import { EYE, applyPose, type PlayerControls } from './controls'
 import { SeatHint } from './hint'
 
@@ -172,6 +173,22 @@ function buildTargets(): SeatTarget[] {
   return targets
 }
 
+function buildApartmentTargets(interactions: ApartmentInteractions): SeatTarget[] {
+  return interactions.seats.map((seat) =>
+    chairTarget(
+      'chair',
+      seat.center[0],
+      seat.center[1],
+      seat.facing,
+      seat.forwardOffset ?? 0,
+      seat.eyeZ,
+      seat.stand,
+      seat.radius,
+      seat.anchor,
+    ),
+  )
+}
+
 /** The approach zone just inside the closed front door (west wall, x = 0). */
 const DOOR_XY: [number, number] = [0.42, (L.FD_Y[0] + L.FD_Y[1]) / 2]
 const DOOR_R = 0.8
@@ -205,6 +222,8 @@ export class SeatingSystem {
   private camera: THREE.PerspectiveCamera
   private hint = new SeatHint()
   private targets = buildTargets()
+  private doorPoint: [number, number] = DOOR_XY
+  private doorRadius = DOOR_R
   private mode: Mode = { k: 'walk' }
   /** runs through seated and scoot states, driving breath and sway */
   private seatedTime = 0
@@ -213,15 +232,34 @@ export class SeatingSystem {
   /** Fires on E at the front door; the host swaps pointer lock for the veil. */
   private onHallway?: () => void
 
-  constructor(controls: PlayerControls, camera: THREE.PerspectiveCamera, onHallway?: () => void) {
+  constructor(
+    controls: PlayerControls,
+    camera: THREE.PerspectiveCamera,
+    onHallway?: () => void,
+    interactions?: ApartmentInteractions,
+  ) {
     this.controls = controls
     this.camera = camera
     this.onHallway = onHallway
+    this.configure(interactions)
     window.addEventListener('keydown', (e) => this.onKey(e))
   }
 
+  /** Rebind seating and the exit-door proximity anchor when the selected
+   * apartment changes. Apartment 20's empty seat list retains its established
+   * couch/chair/bed choreography; apartment 19 supplies its two recliners. */
+  configure(interactions?: ApartmentInteractions): void {
+    this.targets = interactions?.seats.length ? buildApartmentTargets(interactions) : buildTargets()
+    this.doorPoint = interactions?.door.point ?? DOOR_XY
+    this.doorRadius = interactions?.door.radius ?? DOOR_R
+    this.controls.external = false
+    this.controls.lookLocked = false
+    this.mode = { k: 'walk' }
+    this.hint.hide()
+  }
+
   private nearDoor(px: number, py: number): boolean {
-    return this.onHallway !== undefined && Math.hypot(px - DOOR_XY[0], py - DOOR_XY[1]) <= DOOR_R
+    return this.onHallway !== undefined && Math.hypot(px - this.doorPoint[0], py - this.doorPoint[1]) <= this.doorRadius
   }
 
   private onKey(e: KeyboardEvent): void {

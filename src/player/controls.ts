@@ -61,6 +61,12 @@ export class PlayerControls {
     })
   }
 
+  /** Swap the active apartment's authored collision registry. */
+  setColliders(colliders: Obb[]): void {
+    this.colliders = colliders
+    this.vel.set(0, 0)
+  }
+
   /** Spawn just inside the front door, looking down the flat (CAM_master). */
   spawn(x = 2.3, y = -0.55, lookX = 6.4, lookY = 3.9): void {
     this.pos.set(x, y)

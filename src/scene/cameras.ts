@@ -7,12 +7,8 @@
  * and `?grade=0` expose the remaining image-pipeline stages independently.
  */
 import * as THREE from 'three/webgpu'
-
-interface CameraSpec {
-  location: [number, number, number]
-  target: [number, number, number]
-  lens: number
-}
+import type { ApartmentId, CameraSpec } from '../apartments/types'
+import { JOEY_CAMERAS } from '../apartments/joey/contract'
 
 const CAMERAS = {
   master: { location: [2.3, -1.15, 1.64], target: [6.4, 3.9, 1.2], lens: 19 },
@@ -34,10 +30,11 @@ const CAMERAS = {
   bed_foot: { location: [7.92, -1.18, 1.42], target: [10.28, -1.25, 0.58], lens: 38 },
 } satisfies Record<string, CameraSpec>
 
-export type CameraBookmark = keyof typeof CAMERAS
+export type CameraBookmark = string
 
 export interface InspectionMode {
   view: CameraBookmark
+  apartment: ApartmentId
   bloom: boolean
   shadows: boolean
   grade: boolean
@@ -46,10 +43,13 @@ export interface InspectionMode {
 
 export function inspectionFromUrl(url = window.location.href): InspectionMode | null {
   const params = new URL(url).searchParams
+  const apartment: ApartmentId = params.get('apt') === '19' ? '19' : '20'
   const view = params.get('view')
-  if (!view || !(view in CAMERAS)) return null
+  const cameras: Readonly<Record<string, CameraSpec>> = apartment === '19' ? JOEY_CAMERAS : CAMERAS
+  if (!view || !(view in cameras)) return null
   return {
-    view: view as CameraBookmark,
+    view,
+    apartment,
     bloom: params.get('post') !== '0',
     shadows: params.get('shadows') !== '0',
     grade: params.get('grade') !== '0',
@@ -58,8 +58,14 @@ export function inspectionFromUrl(url = window.location.href): InspectionMode | 
 }
 
 /** Match Blender's default 36 mm sensor with AUTO/HORIZONTAL sensor fit. */
-export function applyCameraBookmark(camera: THREE.PerspectiveCamera, bookmark: CameraBookmark): void {
-  const spec = CAMERAS[bookmark]
+export function applyCameraBookmark(
+  camera: THREE.PerspectiveCamera,
+  bookmark: CameraBookmark,
+  apartment: ApartmentId = '20',
+): void {
+  const cameras: Readonly<Record<string, CameraSpec>> = apartment === '19' ? JOEY_CAMERAS : CAMERAS
+  const spec = cameras[bookmark]
+  if (!spec) throw new Error(`Unknown apartment ${apartment} camera ${bookmark}`)
   const horizontalFov = 2 * Math.atan(36 / (2 * spec.lens))
   camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(horizontalFov / 2) / camera.aspect))
   camera.position.set(...spec.location)
