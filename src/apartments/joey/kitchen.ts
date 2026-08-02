@@ -358,24 +358,64 @@ function buildDog(world: World): void {
 }
 
 function buildDartboard(world: World): void {
-  const outer = P.torus(0.2175, 0.012, 48, 8)
-  mlib.rotX(outer, Math.PI * 0.5)
-  const face = mlib.prismXZ(mlib.circle(0.205, 60), -0.014, 0.014)
-  const pieces: MeshData[] = [face, outer]
-  P.wallPlace(pieces, 'W', L.DART_X, L.DART_Z, L.DART_AT)
+  const radius=0.2175
+  const sectorCount=20
+  const surfaceY=0.03
+  const bands:[number,number,'body'|'ring'][]=[
+    [0.0159,0.0955,'body'],[0.0955,0.1069,'ring'],
+    [0.1069,0.162,'body'],[0.162,0.17,'ring'],
+  ]
+  const vertices:Vec3[]=[]
+  const faces:number[][]=[]
+  const slots:number[]=[]
+  const angle=(index:number):number=>Math.PI*0.5+Math.PI/sectorCount+index*Math.PI*2/sectorCount
+  for(let sectorIndex=0;sectorIndex<sectorCount;sectorIndex++){
+    const a0=angle(sectorIndex),a1=angle(sectorIndex+1),dark=sectorIndex%2===0
+    for(const [r0,r1,kind] of bands){
+      const start=vertices.length
+      for(const [r,a] of [[r0,a0],[r1,a0],[r1,a1],[r0,a1]] as const)vertices.push([r*Math.cos(a),surfaceY,r*Math.sin(a)])
+      faces.push([start+3,start+2,start+1,start])
+      slots.push(kind==='ring'?(dark?0:1):(dark?2:3))
+    }
+  }
+  for(const [r0,r1,slot] of [[0,0.0064,0],[0.0064,0.0159,1],[0.17,radius,2]] as const){
+    const start=vertices.length
+    for(let i=0;i<48;i++){
+      const a=Math.PI*2*i/48
+      vertices.push([r0*Math.cos(a),surfaceY,r0*Math.sin(a)],[r1*Math.cos(a),surfaceY,r1*Math.sin(a)])
+    }
+    for(let i=0;i<48;i++){
+      const a=2*i,b=2*((i+1)%48)
+      faces.push([start+b,start+b+1,start+a+1,start+a])
+      slots.push(slot)
+    }
+  }
+  const face=MeshData.from(vertices,faces)
+  face.faceMat=slots
+
+  // The face is the visible side of Blender's centred 32 mm solidify. A
+  // separate backing supplies that thickness without putting a black cap on
+  // the same plane as the colored slots.
+  const backing=mlib.prismXZ(mlib.circle(radius,60),-0.002,surfaceY-0.0015)
+  const wires:MeshData[]=[]
+  for(let i=0;i<sectorCount;i++){
+    const a=angle(i)
+    wires.push(P.rod([0.0159*Math.cos(a),surfaceY+0.0025,0.0159*Math.sin(a)],[0.17*Math.cos(a),surfaceY+0.0025,0.17*Math.sin(a)],0.0011,6))
+  }
+  for(const r of [0.0159,0.0955,0.1069,0.162,0.17]){
+    const ring=P.torus(r,0.0011,44,6)
+    mlib.rotX(ring,Math.PI*0.5)
+    mlib.translate(ring,[0,surfaceY+0.0025,0])
+    wires.push(ring)
+  }
+  const spider=mlib.join(wires)
+  const pieces:MeshData[]=[backing,face,spider]
+  P.wallPlace(pieces,'W',L.DART_X,L.DART_Z,L.DART_AT)
   const pivot: [number, number] = [L.BED_E + (L.BW_TH - 0.042) * 0.5, L.JOEY_DOOR[0] + 0.005]
   for (const piece of pieces) mlib.rotateZ(piece, L.DOOR_OPEN * Math.PI / 180, pivot)
-  add(world, face, M.get('M_DartBlack'))
-  add(world, outer, M.get('M_Chrome'))
-  // Twenty alternating radial sectors sit slightly proud of the board face.
-  for (let i = 0; i < 20; i++) {
-    const a0 = Math.PI * 0.5 + Math.PI / 20 + i * Math.PI / 10
-    const a1 = a0 + Math.PI / 10
-    const sector = mlib.prismXZ([[0,0],[0.162*Math.cos(a0),0.162*Math.sin(a0)],[0.162*Math.cos(a1),0.162*Math.sin(a1)]], -0.0155, -0.014)
-    P.wallPlace([sector], 'W', L.DART_X, L.DART_Z, L.DART_AT)
-    mlib.rotateZ(sector, L.DOOR_OPEN * Math.PI / 180, pivot)
-    add(world, sector, M.get(i % 2 ? 'M_DartCream' : 'M_DartBlack'))
-  }
+  add(world,backing,M.get('M_DartBlack'))
+  world.addMulti(face,[M.get('M_DartRed'),M.get('M_DartGreen'),M.get('M_DartBlack'),M.get('M_DartCream')])
+  add(world,spider,M.get('M_Chrome'))
 }
 
 export function build(world: World): void {

@@ -1,17 +1,17 @@
-/** WebGPU apartment runtime: two scene-owned worlds, shared first-person
- * controls and image pipeline, and hallway-driven scene selection. */
+/** WebGPU apartment runtime: shared renderer and image pipeline at startup,
+ * apartment-owned worlds imported, built, compiled and cached only after the
+ * corresponding hallway door is chosen. */
 import './scene/shadows'
 import * as THREE from 'three/webgpu'
 import { mix, mrt, normalView, output, pass, renderOutput, vec4 } from 'three/tsl'
 import { bloom } from 'three/examples/jsm/tsl/display/BloomNode.js'
 import { ao } from 'three/examples/jsm/tsl/display/GTAONode.js'
-import { APARTMENTS } from './apartments'
+import { loadApartmentDefinition } from './apartments'
 import type { ApartmentDefinition, ApartmentId } from './apartments/types'
 import { World } from './scene/world'
 import { PlayerControls } from './player/controls'
-import { SeatingSystem } from './player/seats'
+import type { SeatingSystem } from './player/seats'
 import { Ui } from './ui/ui'
-import { applyCameraBookmark, inspectionFromUrl } from './scene/cameras'
 import { blenderFilmicVeryHighContrast } from './filmic'
 import { isDesktopChromium } from './platform'
 
@@ -25,10 +25,17 @@ interface BuiltApartment {
   meshes:THREE.Mesh[]
 }
 
+const nextFrame=():Promise<void>=>new Promise((resolve)=>requestAnimationFrame(()=>resolve()))
+
 async function boot():Promise<void> {
   if(!isDesktopChromium(navigator)){Ui.fatal('Desktop Chromium required');return}
-  const inspection=inspectionFromUrl()
   if(!('gpu' in navigator)){Ui.fatal('WebGPU required');return}
+  let requestEntry:(id:ApartmentId)=>void=()=>undefined
+  let requestResume:()=>void=()=>undefined
+  const ui=new Ui({
+    onEnter:(id)=>requestEntry(id),
+    onResume:()=>requestResume(),
+  })
 
   let requiredLimits:Record<string,number>={}
   try{
@@ -43,8 +50,9 @@ async function boot():Promise<void> {
   try{await renderer.init()}catch{Ui.fatal('WebGPU required');return}
   renderer.toneMapping=THREE.NoToneMapping
   renderer.toneMappingExposure=1
-  renderer.shadowMap.enabled=inspection?.shadows??true
+  renderer.shadowMap.enabled=true
   renderer.shadowMap.type=THREE.PCFShadowMap
+  THREE.Cache.enabled=true
   document.body.appendChild(renderer.domElement)
 
   const setSize=():void=>{
@@ -58,140 +66,212 @@ async function boot():Promise<void> {
   camera.up.set(0,0,1)
   let controls:PlayerControls|null=null
   let seats:SeatingSystem|null=null
+  let active:BuiltApartment|null=null
+  let entryTarget:ApartmentId|null=null
+  let entryReady=false
   let started=false
   let toHallway=false
-  let selectedId:ApartmentId=inspection?.apartment??'20'
-  let selectApartment:(id:ApartmentId)=>void=(id)=>{selectedId=id}
-
-  const ui=new Ui({
-    onEnter:(id)=>{selectApartment(id);renderer.domElement.requestPointerLock()},
-    onResume:()=>renderer.domElement.requestPointerLock(),
-  })
-
-  window.addEventListener('resize',()=>{
-    setSize();camera.aspect=innerWidth/innerHeight
-    if(inspection)applyCameraBookmark(camera,inspection.view,inspection.apartment)
-    else camera.updateProjectionMatrix()
-  })
-
-  // Each apartment owns an independent World/Scene/material namespace. They
-  // are both built behind the landing so choosing a door never incurs a room
-  // construction hitch or cross-apartment mesh/material leakage.
-  await new Promise((resolve)=>setTimeout(resolve,30))
-  const built=new Map<ApartmentId,BuiltApartment>()
-  for(const id of ['20','19'] as const){
-    const definition=APARTMENTS[id]
-    const world=new World()
-    await definition.build(world)
-    const meshes:THREE.Mesh[]=[]
-    world.scene.traverse((object)=>{if((object as THREE.Mesh).isMesh)meshes.push(object as THREE.Mesh)})
-    built.set(id,{definition,world,meshes})
+  let rendering=false
+  const requestPointerLock=():void=>{
+    try{void renderer.domElement.requestPointerLock().catch(()=>undefined)}catch{/* Unsupported options/permissions stay on the landing. */}
   }
+  requestResume=()=>{if(active)requestPointerLock()}
 
-  const initial=built.get(selectedId)!
-  controls=new PlayerControls(camera,initial.world.colliders)
-  controls.spawn(...initial.definition.spawn.position,...initial.definition.spawn.lookAt)
-  if(!inspection)seats=new SeatingSystem(controls,camera,()=>{toHallway=true;document.exitPointerLock()},selectedId==='19'?initial.definition.interactions:undefined)
-  if(inspection){applyCameraBookmark(camera,inspection.view,inspection.apartment);ui.enterGame()}
-
+  // The pass graph is apartment-agnostic and can be created over an empty
+  // scene. Only PassNode.scene changes after an apartment cache entry exists.
+  const emptyScene=new THREE.Scene()
   const postProcessing=new THREE.PostProcessing(renderer)
-  const scenePass=pass(initial.world.scene,camera,{samples:renderer.samples})
+  const scenePass=pass(emptyScene,camera,{samples:renderer.samples})
   scenePass.setMRT(mrt({output,normal:normalView}))
   const scenePassColor=scenePass.getTextureNode('output')
   const scenePassNormal=scenePass.getTextureNode('normal')
   const scenePassDepth=scenePass.getTextureNode('depth')
-  let litColor:THREE.Node=scenePassColor
-  if(inspection?.ao!==false){
-    const gtaoPass=ao(scenePassDepth,scenePassNormal,camera)
-    gtaoPass.resolutionScale=1;gtaoPass.radius.value=0.32;gtaoPass.thickness.value=1.25
-    gtaoPass.distanceExponent.value=1.5;gtaoPass.distanceFallOff.value=0.82
-    gtaoPass.scale.value=0.9;gtaoPass.samples.value=12
-    litColor=scenePassColor.mul(mix(1,gtaoPass.getTextureNode().r,0.34))
-  }
+  const gtaoPass=ao(scenePassDepth,scenePassNormal,camera)
+  gtaoPass.resolutionScale=1;gtaoPass.radius.value=0.32;gtaoPass.thickness.value=1.25
+  gtaoPass.distanceExponent.value=1.5;gtaoPass.distanceFallOff.value=0.82
+  gtaoPass.scale.value=0.9;gtaoPass.samples.value=12
+  const litColor:THREE.Node=scenePassColor.mul(mix(1,gtaoPass.getTextureNode().r,0.34))
   const bloomPass=bloom(scenePassColor,0.07,0.5,1)
-  const hdrOutput=inspection?.bloom===false?litColor:litColor.add(bloomPass)
-  if(inspection?.grade!==false){
-    const displayLinear=blenderFilmicVeryHighContrast(hdrOutput.rgb)
-    postProcessing.outputColorTransform=false
-    postProcessing.outputNode=renderOutput(vec4(displayLinear,hdrOutput.a),THREE.NoToneMapping,renderer.outputColorSpace)
-  }else postProcessing.outputNode=hdrOutput
+  const hdrOutput=litColor.add(bloomPass)
+  const displayLinear=blenderFilmicVeryHighContrast(hdrOutput.rgb)
+  postProcessing.outputColorTransform=false
+  postProcessing.outputNode=renderOutput(vec4(displayLinear,hdrOutput.a),THREE.NoToneMapping,renderer.outputColorSpace)
 
-  selectApartment=(id:ApartmentId):void=>{
-    const apartment=built.get(id)
-    if(!apartment)return
-    selectedId=id
-    scenePass.scene=apartment.world.scene
-    controls?.setColliders(apartment.world.colliders)
-    controls?.spawn(...apartment.definition.spawn.position,...apartment.definition.spawn.lookAt)
-    seats?.configure(id==='19'?apartment.definition.interactions:undefined)
-  }
-  selectApartment(selectedId)
+  // Prime render targets and apartment-independent post shaders after the DOM
+  // landing has painted. A selected apartment may download concurrently, but
+  // its geometry/material compilation waits for this shared work to finish.
+  let sharedPipelineError:unknown=null
+  const sharedPipelineReady=(async()=>{
+    await nextFrame()
+    scenePass.scene=emptyScene
+    postProcessing.render()
+    await nextFrame()
+  })().catch((error)=>{sharedPipelineError=error})
 
-  // Compile both apartment material sets against the same final render target.
-  // Scene selection later only swaps PassNode.scene; it does not rebuild post.
-  renderer.setRenderTarget(scenePass.renderTarget)
-  const chunk=12
-  for(const id of ['20','19'] as const){
-    const apartment=built.get(id)!
-    scenePass.scene=apartment.world.scene
-    for(let i=0;i<apartment.meshes.length;i+=chunk){
-      apartment.meshes.forEach((mesh,index)=>{mesh.visible=index>=i&&index<i+chunk})
-      await renderer.compileAsync(apartment.world.scene,camera)
-      await new Promise((resolve)=>setTimeout(resolve,0))
-    }
-    for(const mesh of apartment.meshes)mesh.visible=true
-  }
-  renderer.setRenderTarget(null)
-  selectApartment(selectedId)
-
-  type WarmTask={id:ApartmentId;shadow:THREE.LightShadow}
-  const warmTasks:WarmTask[]=[]
-  for(const id of ['20','19'] as const){
-    for(const light of built.get(id)!.world.lights){
-      if(light.castShadow&&light.shadow){light.shadow.autoUpdate=false;warmTasks.push({id,shadow:light.shadow})}
-    }
-  }
-  let warmIndex=0
-  let settleFrames=0
-  let ready=false
-  let rendering=false
   const clock=new THREE.Clock(false)
-
   const stopRendering=():void=>{if(!rendering)return;renderer.setAnimationLoop(null);clock.stop();rendering=false}
   const renderFrame=():void=>{
     const dt=clock.getDelta()
-    if(!ready){
-      if(warmIndex<warmTasks.length){
-        const task=warmTasks[warmIndex++]
-        scenePass.scene=built.get(task.id)!.world.scene
-        task.shadow.needsUpdate=true
-      }else{
-        scenePass.scene=built.get(selectedId)!.world.scene
-        settleFrames++
-      }
-      postProcessing.render()
-      if(warmIndex>=warmTasks.length&&settleFrames>=2){
-        ready=true;selectApartment(selectedId);ui.ready()
-        if(document.pointerLockElement!==renderer.domElement)stopRendering()
-      }
-      return
-    }
-    if(!inspection&&controls?.enabled)controls.update(dt)
+    if(controls?.enabled)controls.update(dt)
     seats?.update(dt)
     postProcessing.render()
   }
   const startRendering=():void=>{if(rendering)return;rendering=true;clock.start();renderer.setAnimationLoop(renderFrame)}
 
+  const poseForBuild=(definition:ApartmentDefinition):void=>{
+    const [x,y]=definition.spawn.position
+    const [lookX,lookY]=definition.spawn.lookAt
+    camera.position.set(x,y,1.62)
+    camera.up.set(0,0,1)
+    camera.lookAt(lookX,lookY,1.58)
+    camera.updateProjectionMatrix()
+  }
+
+  async function compileApartment(apartment:BuiltApartment):Promise<void>{
+    const {world,meshes,definition}=apartment
+    poseForBuild(definition)
+    const previousScene=scenePass.scene
+    const visible=meshes.map((mesh)=>mesh.visible)
+    scenePass.scene=world.scene
+    renderer.setRenderTarget(scenePass.renderTarget)
+    try{
+      const chunkSize=12
+      for(let start=0;start<meshes.length;start+=chunkSize){
+        meshes.forEach((mesh,index)=>{mesh.visible=visible[index]&&index>=start&&index<start+chunkSize})
+        await renderer.compileAsync(world.scene,camera)
+        await nextFrame()
+      }
+    }finally{
+      meshes.forEach((mesh,index)=>{mesh.visible=visible[index]})
+      renderer.setRenderTarget(null)
+      scenePass.scene=previousScene
+    }
+  }
+
+  async function warmApartment(apartment:BuiltApartment):Promise<void>{
+    if(!renderer.shadowMap.enabled)return
+    const previousScene=scenePass.scene
+    scenePass.scene=apartment.world.scene
+    try{
+      for(const light of apartment.world.lights){
+        if(!light.castShadow||!light.shadow)continue
+        light.shadow.autoUpdate=false
+        light.shadow.needsUpdate=true
+        postProcessing.render()
+        await nextFrame()
+      }
+      // One settled full-scene frame primes the shared AO/bloom/presentation
+      // passes after the apartment-specific material and shadow compilation.
+      postProcessing.render()
+      await nextFrame()
+    }finally{scenePass.scene=previousScene}
+  }
+
+  const built=new Map<ApartmentId,BuiltApartment>()
+  const pending=new Map<ApartmentId,Promise<BuiltApartment>>()
+  const getApartment=(id:ApartmentId):Promise<BuiltApartment>=>{
+    const cached=built.get(id)
+    if(cached)return Promise.resolve(cached)
+    const existing=pending.get(id)
+    if(existing)return existing
+    const request=(async()=>{
+      const definitionRequest=loadApartmentDefinition(id)
+      const [definition]=await Promise.all([definitionRequest,sharedPipelineReady])
+      if(sharedPipelineError!==null)throw sharedPipelineError
+      await nextFrame()
+      const world=new World()
+      await definition.build(world)
+      const meshes:THREE.Mesh[]=[]
+      world.scene.traverse((object)=>{if((object as THREE.Mesh).isMesh)meshes.push(object as THREE.Mesh)})
+      const apartment={definition,world,meshes}
+      await compileApartment(apartment)
+      await warmApartment(apartment)
+      built.set(id,apartment)
+      return apartment
+    })().catch((error)=>{
+      pending.delete(id)
+      throw error
+    })
+    pending.set(id,request)
+    void request.then(()=>pending.delete(id))
+    return request
+  }
+
+  const activateApartment=async(apartment:BuiltApartment):Promise<void>=>{
+    apartment.definition.activate?.(apartment.world.scene)
+    scenePass.scene=apartment.world.scene
+    if(!controls)controls=new PlayerControls(camera,apartment.world.colliders)
+    else controls.setColliders(apartment.world.colliders)
+    controls.spawn(...apartment.definition.spawn.position,...apartment.definition.spawn.lookAt)
+    const interactions=apartment.definition.interactions.seats.length?apartment.definition.interactions:undefined
+    if(!seats){
+      const {SeatingSystem:Seats}=await import('./player/seats')
+      seats=new Seats(controls,camera,()=>{toHallway=true;document.exitPointerLock()},interactions)
+    }else seats.configure(interactions)
+    active=apartment
+    controls.enabled=document.pointerLockElement===renderer.domElement
+  }
+
+  const tryEnter=():void=>{
+    if(!entryReady||!entryTarget||active?.definition.id!==entryTarget)return
+    if(document.pointerLockElement!==renderer.domElement)return
+    entryReady=false
+    entryTarget=null
+    started=true
+    ui.enterGame()
+    startRendering()
+  }
+
+  requestEntry=(id)=>{
+    entryTarget=id
+    entryReady=false
+    ui.beginLoading(id)
+    // Pointer lock must be requested while the door click still owns transient
+    // user activation; scene import/compilation continues behind the landing.
+    requestPointerLock()
+    void (async()=>{
+      try{
+        const apartment=await getApartment(id)
+        if(entryTarget!==id)return
+        await activateApartment(apartment)
+        if(entryTarget!==id)return
+        entryReady=true
+        ui.finishLoading()
+        tryEnter()
+      }catch{
+        if(entryTarget!==id)return
+        entryTarget=null
+        entryReady=false
+        started=false
+        stopRendering()
+        ui.finishLoading()
+        if(document.pointerLockElement===renderer.domElement)document.exitPointerLock()
+        Ui.fatal('Scene unavailable')
+      }
+    })()
+  }
+
+  window.addEventListener('resize',()=>{
+    setSize();camera.aspect=innerWidth/innerHeight
+    camera.updateProjectionMatrix()
+  })
+
   document.addEventListener('pointerlockchange',()=>{
     const locked=document.pointerLockElement===renderer.domElement
-    if(controls)controls.enabled=locked
-    if(locked){started=true;ui.enterGame();startRendering()}
-    else if(started){
+    if(controls)controls.enabled=locked&&!!active
+    if(locked){
+      if(entryTarget)tryEnter()
+      else if(started&&active){ui.enterGame();startRendering()}
+      return
+    }
+    if(entryTarget)return
+    if(started){
       stopRendering()
       if(toHallway){toHallway=false;ui.showHallway()}else ui.showPause()
     }
   })
-  startRendering()
+
+  ui.ready()
 }
 
-boot()
+void boot()

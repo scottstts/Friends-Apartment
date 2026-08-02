@@ -1,6 +1,6 @@
 /** Apartment 19 bedrooms and bathroom from build_scripts/Joeys_apt/f_beds.py. */
 import type * as THREE from 'three/webgpu'
-import { MeshData, type Vec3 } from '../../lib/mesh'
+import { MeshData, type Vec2, type Vec3 } from '../../lib/mesh'
 import * as mlib from '../../lib/mlib'
 import { PyRandom } from '../../lib/rng'
 import type { World } from '../../scene/world'
@@ -96,19 +96,55 @@ function buildBedrooms(world:World):void {
   buildBedroomDressing(world)
 }
 
+/** Rectangular stone slab with the authoritative oval through-cut from
+ * f_beds.py. Every angular sample owns both an ellipse point and the point
+ * where the same ray meets the outer rectangle, so the top is one continuous
+ * annular surface instead of four strips with exposed square corners. */
+function vanityTopWithOvalCutout(
+  x0:number,y0:number,x1:number,y1:number,z0:number,z1:number,
+  cx:number,cy:number,axisX:number,axisY:number,segments=56,
+):MeshData {
+  const cornerAngles:[[number,number],[number,number],[number,number],[number,number]]=[
+    [x1,y1],[x0,y1],[x0,y0],[x1,y0],
+  ]
+  const angles=[
+    ...Array.from({length:segments},(_,i)=>Math.PI*2*i/segments),
+    ...cornerAngles.map(([x,y])=>(Math.atan2(y-cy,x-cx)+Math.PI*2)%(Math.PI*2)),
+  ].sort((a,b)=>a-b).filter((angle,index,list)=>index===0||Math.abs(angle-list[index-1])>1e-10)
+  const outer:Vec2[]=[]
+  const inner:Vec2[]=[]
+  for(const angle of angles){
+    const c=Math.cos(angle),s=Math.sin(angle)
+    let distance=Number.POSITIVE_INFINITY
+    if(Math.abs(c)>1e-9)distance=Math.min(distance,((c>0?x1:x0)-cx)/c)
+    if(Math.abs(s)>1e-9)distance=Math.min(distance,((s>0?y1:y0)-cy)/s)
+    outer.push([cx+c*distance,cy+s*distance])
+    inner.push([cx+axisX*c,cy+axisY*s])
+  }
+  return mlib.aperturedPrism(outer,inner,z0,z1,0.004,3)
+}
+
 function buildVanity(world:World):void {
   const x1=L.BA_X[1],x0=x1-0.56,[y0,y1]=L.BA_VAN_Y,side=0.018
   const body=mlib.join([mlib.box(x0,y0,0.1,x1,y0+side,0.84),mlib.box(x0,y1-side,0.1,x1,y1,0.84),mlib.box(x1-side,y0+side,0.1,x1,y1-side,0.84),mlib.box(x0,y0+side,0.1,x1-side,y1-side,0.118),mlib.box(x0,y0+side,0.79,x0+side,y1-side,0.84)])
   add(world,mlib.bevel(body,0.003,2),M.get('M_VanityPaint'),true)
   const doorWidth=(y1-y0)*0.5-0.02
-  for(let i=0;i<2;i++){const y=y0+0.012+i*(y1-y0)*0.5;const door=P.cabinetDoor(doorWidth,0.64,0.019,0.052,0.014,0.007);mlib.rotateZ(door,-Math.PI*0.5);mlib.translate(door,[x0-0.004,y+doorWidth,0.15]);add(world,door,M.get('M_VanityPaint'))}
+  for(let i=0;i<2;i++){
+    const y=y0+0.012+i*(y1-y0)*0.5
+    const door=P.cabinetDoor(doorWidth,0.64,0.019,0.052,0.014,0.007)
+    mlib.rotateZ(door,-Math.PI*0.5);mlib.translate(door,[x0-0.004,y+doorWidth,0.15]);add(world,door,M.get('M_VanityPaint'))
+    const knob=P.knob(0.014,0.012)
+    P.faceX(knob,-1,[x0-0.002,y+(i?0.045:doorWidth-0.045),0.7])
+    add(world,knob,M.get('M_BathChrome'))
+  }
   const [bx,by]=L.BA_BASIN,top=0.876
-  // Four stone strips leave a real oval-scale opening around the drop-in bowl.
-  add(world,mlib.join([mlib.box(x0-0.02,y0-0.02,top-0.036,bx-0.18,y1+0.02,top),mlib.box(bx+0.18,y0-0.02,top-0.036,x1,y1+0.02,top),mlib.box(bx-0.18,y0-0.02,top-0.036,bx+0.18,by-0.145,top),mlib.box(bx-0.18,by+0.145,top-0.036,bx+0.18,y1+0.02,top)]),M.get('M_VanityTop'))
+  add(world,vanityTopWithOvalCutout(x0-0.02,y0-0.02,x1,y1+0.02,top-0.036,top,bx,by,0.176,0.141),M.get('M_VanityTop'))
   const basin=P.lathe([[0,0],[0.06,0.004],[0.115,0.04],[0.15,0.086],[0.163,0.116],[0.168,0.128],[0.212,0.134],[0.213,0.146],[0.204,0.15],[0.164,0.14],[0.158,0.126],[0.144,0.086],[0.106,0.04],[0.052,0.014],[0,0.012]],36);mlib.scaleMesh(basin,[1,0.8,1]);add(world,mlib.translate(basin,[bx,by,top-0.138]),M.get('M_Sanitary'))
+  add(world,mlib.translate(P.lathe([[0,0],[0.022,0],[0.022,0.004],[0,0.004]],18),[bx,by,top-0.126]),M.get('M_BathChrome'))
   const tx=x1-0.058
   add(world,mlib.translate(P.lathe([[0,0],[0.036,0],[0.034,0.01],[0.019,0.026],[0.018,0.098],[0.024,0.106],[0,0.108]],20),[tx,by,top]),M.get('M_BathChrome'))
   add(world,mlib.tubeAlong([[tx,by,top+0.104],[tx-0.062,by,top+0.126],[tx-0.118,by,top+0.092]],mlib.circle(0.014,12)),M.get('M_BathChrome'))
+  for(const side of [-1,1])add(world,mlib.translate(P.lathe([[0,0],[0.026,0],[0.024,0.008],[0.01,0.014],[0.009,0.038],[0.02,0.046],[0.019,0.056],[0,0.058]],16),[tx,by+side*0.086,top]),M.get('M_BathChrome'))
   const [frame,mirror]=P.frameArt(1,0.78,0.03,0.038,0.008,0.019);P.wallPlace([frame,mirror],'E',by,1.52,L.BA_X[1]);add(world,frame,M.get('M_VanityPaint'));add(world,mirror,M.get('M_MirrorGlass'))
 }
 

@@ -195,6 +195,13 @@ h1 { margin: 0; }
  * focus parked on 20 never enlarges it by itself. */
 .intro.ready .doorway.left .door:hover { transform: rotateY(13deg) scale(1.045); }
 .intro.ready .doorway.right .door:hover { transform: rotateY(-13deg) scale(1.045); }
+.intro.loading { cursor: wait; }
+.intro.loading .door { pointer-events: none; cursor: wait; }
+.intro.loading .enter { opacity: 0.28; }
+.intro.loading .dots i { animation: dotwave 1.15s ease-in-out infinite; }
+.intro.loading19 .doorway.right, .intro.loading20 .doorway.left { opacity: 0.52; transition: opacity 0.45s ease; }
+.intro.loading19 .d19 .underlight, .intro.loading20 .d20 .underlight { animation: loadglow 1.15s ease-in-out infinite; }
+@keyframes loadglow { 0%, 100% { opacity: 0.48; } 50% { opacity: 1; } }
 .pause { cursor: pointer; }
 
 .msg {
@@ -345,6 +352,7 @@ export class Ui {
   private isReady = false
   private opened = false
   private entered = false
+  private loading = false
   private hideTimer = 0
   private selected: ApartmentId = '20'
 
@@ -389,7 +397,7 @@ export class Ui {
     }
     for (const id of ['19', '20'] as const) {
       activate(this.enterDoors[id], () => {
-        if (!this.isReady || this.opened) return
+        if (!this.isReady || this.opened || this.loading) return
         this.selected = id
         this.hooks.onEnter(id)
       })
@@ -415,8 +423,24 @@ export class Ui {
     this.enterDoors[this.selected].focus({ preventScroll: true })
   }
 
+  beginLoading(id:ApartmentId):void {
+    this.loading=true
+    this.selected=id
+    this.intro.classList.remove('loading19','loading20')
+    this.intro.classList.add('loading',`loading${id}`)
+    this.intro.setAttribute('aria-busy','true')
+  }
+
+  finishLoading():void {
+    this.loading=false
+    this.intro.classList.remove('loading','loading19','loading20')
+    this.intro.removeAttribute('aria-busy')
+    if(!this.opened&&this.intro.style.display!=='none')this.enterDoors[this.selected].focus({preventScroll:true})
+  }
+
   enterGame(): void {
     this.hidePause()
+    this.finishLoading()
     if (this.opened) return
     this.opened = true
     this.entered = true
@@ -442,7 +466,9 @@ export class Ui {
     this.hidePause()
     window.clearTimeout(this.hideTimer)
     this.opened = false
-    this.intro.classList.remove('open', 'open19', 'open20')
+    this.loading = false
+    this.intro.classList.remove('open', 'open19', 'open20', 'loading', 'loading19', 'loading20')
+    this.intro.removeAttribute('aria-busy')
     this.intro.style.display = ''
     if (this.isReady) this.enterDoors[this.selected].focus({ preventScroll: true })
   }

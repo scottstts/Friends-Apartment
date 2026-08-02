@@ -67,9 +67,13 @@ export function panelDoor(
 export function doorHardware(width: number, thickness: number, hingeLeft = true, z = 1.02): MeshData {
   const parts: MeshData[] = []
   const x = hingeLeft ? width - 0.085 : 0.085
+  // The Blender rose starts on the leaf face. Offset the complete turned
+  // assembly by 0.8 mm along its outward axis so the rose and leaf never
+  // submit coplanar fragments in WebGPU.
+  const clearance = 0.0008
   for (const [y, direction] of [[0, -1], [thickness, 1]] as const) {
-    const rose = P.lathe([[0, 0], [0.031, 0], [0.033, 0.006], [0.03, 0.011], [0, 0.012]], 24)
-    const knob = P.lathe([[0, 0.011], [0.011, 0.013], [0.012, 0.031], [0.021, 0.046], [0.026, 0.063], [0.022, 0.077], [0.012, 0.084], [0, 0.086]], 24, 42)
+    const rose = P.lathe([[0, clearance], [0.031, clearance], [0.033, 0.006 + clearance], [0.03, 0.011 + clearance], [0, 0.012 + clearance]], 24)
+    const knob = P.lathe([[0, 0.011 + clearance], [0.011, 0.013 + clearance], [0.012, 0.031 + clearance], [0.021, 0.046 + clearance], [0.026, 0.063 + clearance], [0.022, 0.077 + clearance], [0.012, 0.084 + clearance], [0, 0.086 + clearance]], 24, 42)
     for (const md of [rose, knob]) {
       mlib.rotX(md, Math.PI * 0.5 * direction)
       mlib.translate(md, [x, y, z])

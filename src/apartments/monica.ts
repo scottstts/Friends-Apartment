@@ -13,5 +13,4 @@ export const monicaApartment:ApartmentDefinition={
   // list selects those established couch/chair/bed targets without copying
   // scene-private dimensions into this adapter.
   interactions:{seats:[],door:{point:[0.42,(L.FD_Y[0]+L.FD_Y[1])/2],radius:0.8}},
-  cameras:{},
 }

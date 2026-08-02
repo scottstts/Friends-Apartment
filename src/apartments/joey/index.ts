@@ -1,6 +1,5 @@
 import type { ApartmentDefinition } from '../types'
 import * as L from './layout'
-import { JOEY_CAMERAS } from './contract'
 import * as shell from './shell'
 import * as openings from './openings'
 import * as environment from './environment'
@@ -49,5 +48,4 @@ export const joeyApartment:ApartmentDefinition={
     ],
     door:{point:[L.EX-0.52,(L.FD_Y[0]+L.FD_Y[1])*0.5],radius:0.86},
   },
-  cameras:JOEY_CAMERAS,
 }

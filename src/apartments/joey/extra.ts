@@ -93,8 +93,11 @@ function buildBookcase(world:World):void {
 function buildPhone(world:World):void {
   const y=L.PHONE_Y,z=1.44,x=L.EX,front=x-0.07,handX=front-0.032
   add(world,rounded(front,y-0.086,z-0.135,x-0.004,y+0.086,z+0.135,0.016),M.get('M_PhoneWhite'))
-  add(world,rounded(front,y-0.05,z-0.104,front+0.009,y+0.05,z+0.078,0.002),M.get('M_FoosGrip'))
-  for(let row=0;row<4;row++)for(let col=0;col<3;col++)add(world,rounded(front-0.002,y-0.032+col*0.032-0.0125,z+0.062-row*0.044-0.0165,front+0.005,y-0.032+col*0.032+0.0125,z+0.062-row*0.044+0.0165,0.0018),M.get('M_PhoneWhite'))
+  // WebGPU cannot resolve the Blender well/body faces when both begin at XF.
+  // Keep the well recessed behind the keys but 0.8 mm proud of the body plane.
+  const wellFront=front-0.0008
+  add(world,rounded(wellFront,y-0.05,z-0.104,front+0.009,y+0.05,z+0.078,0.002),M.get('M_FoosGrip'))
+  for(let row=0;row<4;row++)for(let col=0;col<3;col++)add(world,rounded(front-0.0032,y-0.032+col*0.032-0.0125,z+0.062-row*0.044-0.0165,front+0.005,y-0.032+col*0.032+0.0125,z+0.062-row*0.044+0.0165,0.0018),M.get('M_PhoneWhite'))
   add(world,P.sweepVar([[handX,y,z+0.146],[handX-0.001,y,z+0.116],[handX-0.002,y,z+0.066],[handX-0.003,y,z+0.004],[handX-0.002,y,z-0.06],[handX-0.001,y,z-0.112],[handX,y,z-0.142]],[[0.03,0.031],[0.031,0.032],[0.017,0.018],[0.0145,0.0155],[0.017,0.018],[0.031,0.032],[0.029,0.03]],20),M.get('M_PhoneWhite'))
   const coil:Vec3[]=Array.from({length:96},(_,i)=>{const t=i/95,a=t*Math.PI*18;return[front-0.01-0.012*(1-Math.cos(a)),y+0.044+0.028*Math.sin(a),z-0.152-t*0.36]})
   add(world,mlib.tubeAlong(coil,mlib.circle(0.004,6)),M.get('M_PhoneWhite'))
