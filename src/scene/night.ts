@@ -30,7 +30,7 @@ import {
   abs,
   add,
   asin,
-  atan2,
+  atan,
   clamp,
   cos,
   dot,
@@ -126,7 +126,7 @@ function atmoCpu(x: number, y: number, z: number): V3 {
 // ------------------------------------------------------- sky gradient (TSL)
 
 function atmoNode(dir: N): N {
-  const az = atan2(dir.x, dir.y)
+  const az = atan(dir.x, dir.y)
   const lobe = add(1, mul(GLOW_LOBE, pow(add(0.5, mul(0.5, cos(sub(az, LOBE_AZ)))), 2)))
   const hz = exp(mul(max(dir.z, 0), -1 / GLOW_H))
   const sky = mix(vec3(...ZENITH), mul(vec3(...GLOW), lobe), hz)
@@ -299,7 +299,7 @@ function midground(w: World): void {
 
 function nightSkyNode(): N {
   const dir = normalWorldGeometry.normalize().toVar()
-  const az = atan2(dir.x, dir.y).toVar()
+  const az = atan(dir.x, dir.y).toVar()
   const el = asin(clamp(dir.z, -1, 1)).toVar()
   const atmo = atmoNode(dir).toVar()
 

@@ -23,6 +23,7 @@ function buildMaterials():void {
   for (const [name,color] of [['Book1','7A2A24'],['Book2','234A6E'],['Book3','2E5A3C'],['Book4','B08A3A'],['Book5','4A3468'],['Book6','8A4420'],['Book7','D8D0BC'],['Book8','2C2A28']]) M.paper(`M_${name}`,color,{rough:0.48,gloss:0.22})
   M.wood('M_StickWood',['A8804A','C6A268','7E5A2E'],{ring:40,axis:'Z',rough:[0.28,0.5],coat:0.2,scale:2})
   M.plastic('M_StickTape','1C1C1F',{rough:0.62})
+  M.fabric('M_MopYarn','C8C0AC',{rough:0.96,weave:180,sheen:0.12,bump:0.9,fuzz:1.6})
   M.plastic('M_PhoneWhite','E8E4D8',{rough:0.34,coat:0.28})
 }
 
@@ -103,14 +104,81 @@ function buildPhone(world:World):void {
   add(world,mlib.tubeAlong(coil,mlib.circle(0.004,6)),M.get('M_PhoneWhite'))
 }
 
-function buildHockeySticks(world:World):void {
-  for(const [bx,by,lean,yaw] of [[3.2,L.NY-0.212,-8,-9],[3.38,L.NY-0.246,-9.2,6]]){
-    const parts:Part[]=[]
-    parts.push([mlib.tubeAlong([[0,0,0.055],[0,0,0.56],[0,0,1.06],[0,0,1.432]],mlib.roundedRect(0.019,0.028,0.005,3)),'M_StickWood'])
-    parts.push([P.sweepVar([[-0.004,0,0.0525],[0.062,0.001,0.0495],[0.14,0.004,0.0465],[0.212,0.009,0.0445],[0.262,0.014,0.0385]],[[0.0095,0.038],[0.0092,0.036],[0.0086,0.033],[0.0078,0.028],[0.005,0.017]],12),'M_StickTape'])
-    parts.push([mlib.tubeAlong([[0,0,1.196],[0,0,1.418]],mlib.roundedRect(0.0215,0.0305,0.006,3)),'M_StickTape'])
-    parts.push([rounded(-0.0125,-0.018,1.418,0.0125,0.018,1.446,0.008),'M_StickTape'])
-    for(const [md,material] of parts){mlib.rotX(md,lean*Math.PI/180);mlib.rotateZ(md,yaw*Math.PI/180);mlib.translate(md,[bx,by,0]);add(world,md,M.get(material))}
+function buildMopHead(world:World,cx:number,cy:number,top:number,drop:number,seed:number):void {
+  const ferrule=P.lathe([[0,0],[0.021,0],[0.023,0.012],[0.031,0.022],[0.032,0.07],[0.024,0.084],[0,0.086]],18)
+  add(world,mlib.translate(ferrule,[cx,cy,top-0.07]),M.get('M_Rod'))
+
+  add(world,P.sweepVar(
+    [[cx,cy,top-0.01],[cx,cy,top-0.07],[cx,cy,top-drop*0.42],[cx,cy,top-drop*0.66]],
+    [[0.024,0.024],[0.03,0.03],[0.032,0.032],[0.028,0.028]],16,[0,0,1],true,54,
+  ),M.get('M_MopYarn'))
+
+  const rng=new PyRandom(seed)
+  const addStrands=(count:number,r0:number,flare0:number,flare1:number,radius:number):void=>{
+    for(let k=0;k<count;k++){
+      const angle=Math.PI*2*k/count+rng.uniform(-0.09,0.09)
+      const drift=rng.uniform(-0.26,0.26)
+      const flare=rng.uniform(flare0,flare1)
+      const length=drop*rng.uniform(0.82,1)
+      const at=(z:number,r:number,a:number):Vec3=>[cx+r*Math.cos(a),cy+r*Math.sin(a),z]
+      const path:Vec3[]=[
+        at(top-0.014,r0*0.7,angle),
+        at(top-0.062,r0,angle+drift*0.1),
+        at(top-length*0.38,r0*1.04+flare*0.26,angle+drift*0.34),
+        at(top-length*0.72,r0*1.08+flare*0.66,angle+drift*0.68),
+        at(top-length,r0*1.1+flare,angle+drift),
+      ]
+      const strand=mlib.tubeAlong(path,mlib.circle(radius,6))
+      mlib.smoothShade(strand,50)
+      add(world,strand,M.get('M_MopYarn'))
+    }
+  }
+  addStrands(34,0.025,0.012,0.032,0.004)
+  addStrands(22,0.013,0.006,0.02,0.0036)
+}
+
+function buildMops(world:World):void {
+  const hookHeight=1.78
+  const stand=0.078
+  const ferruleHeight=0.335
+  const specs:[number,number,number][]=[[3.12,1.404,0.33],[3.31,1.462,0.352]]
+  for(let i=0;i<specs.length;i++){
+    const [bx,handleLength,drop]=specs[i]
+    const rose=P.lathe([[0,0],[0.02,0],[0.021,0.005],[0.016,0.009],[0,0.01]],16)
+    P.faceY(rose,-1,[bx,L.NY,hookHeight])
+    add(world,rose,M.get('M_Rod'))
+
+    const hook=mlib.tubeAlong([
+      [bx,L.NY-0.004,hookHeight],
+      [bx,L.NY-stand*0.62,hookHeight],
+      [bx,L.NY-stand-0.008,hookHeight-0.01],
+      [bx,L.NY-stand-0.014,hookHeight-0.03],
+      [bx,L.NY-stand,hookHeight-0.044],
+      [bx,L.NY-stand+0.02,hookHeight-0.04],
+    ],mlib.circle(0.0038,8))
+    mlib.smoothShade(hook,48)
+    add(world,hook,M.get('M_Rod'))
+
+    const by=L.NY-stand
+    const ringZ=hookHeight-0.026
+    const base=ringZ-(handleLength+0.05)
+    const handle=mlib.tubeAlong([
+      [bx,by,base+ferruleHeight-0.09],
+      [bx,by,base+0.62],
+      [bx,by,base+1.02],
+      [bx,by,base+handleLength],
+    ],mlib.circle(0.0125,12))
+    mlib.smoothShade(handle,46)
+    add(world,handle,M.get('M_StickWood'))
+
+    const cap=P.lathe([[0,0],[0.0128,0],[0.0132,0.03],[0.01,0.042],[0,0.046]],14)
+    add(world,mlib.translate(cap,[bx,by,base+handleLength-0.004]),M.get('M_StickTape'))
+
+    const ring=P.torus(0.0092,0.0024,16,6,[bx,by,ringZ])
+    mlib.rotY(ring,Math.PI*0.5,[bx,by,ringZ])
+    add(world,ring,M.get('M_Rod'))
+
+    buildMopHead(world,bx,by,base+ferruleHeight,drop,11+i*7)
   }
 }
 
@@ -119,5 +187,5 @@ export function build(world:World):void {
   buildFoosball(world)
   buildBookcase(world)
   buildPhone(world)
-  buildHockeySticks(world)
+  buildMops(world)
 }

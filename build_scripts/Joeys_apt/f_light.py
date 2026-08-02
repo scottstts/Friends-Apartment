@@ -34,14 +34,16 @@ C = "Light"
 # what was designed - a rose against the strip under the wall units against the
 # floor lamp - and they should not have to be re-derived every time the overall
 # exposure moves.  Tune this, not the individual wattages.
-GAIN = 0.148         # 0.185 x 0.80 - the whole scheme pulled down 20%
+GAIN = 0.185
 
-WARM = 'FFF5EC'          # tungsten through a shade, around 3200 K
-WARM_HOT = 'FFF2E6'      # the small bright ones read a touch whiter
+WARM = 'FFEBD2'          # tungsten through a shade, nearer 2900 K
+WARM_HOT = 'FFE8CC'      # the small bright ones read a touch whiter
 COOL = 'DCE8F4'
 
 
 def materials():
+    # the glowing surfaces carry the same warmth as the lamps inside them, or
+    # the shade reads a different colour from the light it is giving off
     mats.emissive("M_BulbGlow", WARM_HOT, strength=6.0)
     mats.emissive("M_DomeGlow", WARM, strength=2.4)
     mats.emissive("M_StripGlow", WARM_HOT, strength=3.4)
@@ -298,17 +300,30 @@ def build(bake=True):
     build_env.world(strength=1.20, turbidity=2.4, elev=52.0, rot=200.0)
 
     # ---- ceiling roses ----------------------------------------------------
-    ceiling_rose("LT_RoseA", 2.05, 5.05, energy=470.0)
-    ceiling_rose("LT_RoseB", 2.55, 2.20, energy=420.0)
-    ceiling_rose("LT_RoseC", 6.55, 3.30, energy=520.0)
-    # The entry end runs dark in the survey - the front door, the foosball and
-    # the whole south-east corner had no fixture over them at all.  A fourth
-    # rose, in the position a real flat would put one.
-    ceiling_rose("LT_RoseD", 7.30, 1.30, energy=430.0)
+    # A REGULAR GRID, not fixtures dropped one at a time wherever the room
+    # looked dark.  Four roses cannot cover 65 m2: the west half of this flat
+    # had no overhead fixture at all - the nearest one to the entertainment
+    # wall was two metres away, so everything from the bookcase to Joey's door
+    # was lit by bounce, which is why that side went flat and dim.
+    #
+    # Columns sit on the eighth-points of the flat's width and rows on the
+    # sixth-points of its depth, so every fixture is half a bay from the wall
+    # behind it and a full bay from its neighbours - the layout an electrician
+    # sets out, and it reads as deliberate from any angle.  Two of the twelve
+    # cells fall outside the room, because the kitchen alcove stops at the jog,
+    # so they are simply not built.
+    COLS = [L.EX * (2 * k + 1) / 8.0 for k in range(4)]          # 1.06 .. 7.41
+    ROWS = [L.SY + (L.NY - L.SY) * (2 * k + 1) / 6.0 for k in range(3)]
+    for cx in COLS:
+        for cy in ROWS:
+            if cx > L.JX and cy > L.NY2:        # the alcove ends at the jog
+                continue
+            ceiling_rose("LT_Rose_%02d%02d" % (round(cx * 10), round(cy * 10)),
+                         cx, cy, energy=300.0)
 
     # ---- practicals in the living room ------------------------------------
     sconce("LT_Sconce", 6.86, 2.24, 'W', L.WX, energy=210.0)
-    bulb_in("LT_FloorLamp", (3.02, L.NY - 0.44, 1.520), 320.0)
+    bulb_in("LT_FloorLamp", (L.FLOOR_LAMP[0], L.FLOOR_LAMP[1], 1.520), 320.0)
 
     # ---- kitchen ----------------------------------------------------------
     under_cabinet("LT_UnderCab", L.K_UPPER[0] + 0.03, L.K_UPPER[1] - 0.03,
@@ -319,8 +334,11 @@ def build(bake=True):
     # ---- bedrooms ---------------------------------------------------------
     bulb_in("LT_JoeyLamp", (L.JO_X[0] + 0.30, 1.72, 0.870), 135.0)
     bulb_in("LT_ChanLamp", (L.CH_X[0] + 0.30, 3.42, 0.870), 135.0)
-    ceiling_rose("LT_RoseJ", L.JO_X[0] + 1.80, 0.70, energy=250.0)
-    ceiling_rose("LT_RoseC2", L.CH_X[0] + 1.80, 4.60, energy=250.0)
+    # dead centre of each room, which is where a bedroom's one fixture goes
+    ceiling_rose("LT_RoseJ", (L.JO_X[0] + L.JO_X[1]) * 0.5,
+                 (L.JO_Y[0] + L.JO_Y[1]) * 0.5, energy=290.0)
+    ceiling_rose("LT_RoseC2", (L.CH_X[0] + L.CH_X[1]) * 0.5,
+                 (L.CH_Y[0] + L.CH_Y[1]) * 0.5, energy=290.0)
 
     # ---- bathroom ---------------------------------------------------------
     vanity_light("LT_Vanity", L.BA_BASIN[1], 2.020, 'E', L.BA_X[1], energy=200.0,

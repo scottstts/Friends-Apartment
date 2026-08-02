@@ -190,6 +190,11 @@ SOFA_C = ((WIN_A[0] + WIN_B[1]) * 0.5, NY - 0.47)
 SOFA_L = 1.96
 SOFA_D = 0.90
 COFFEE_C = (1.42, NY - 1.42)
+SIDE_T = (2.86, NY - 0.62)     # the white two-tier table, 245 top radius
+# The floor lamp stands EAST of that table, clear of it.  At (3.02, NY-0.44)
+# the two centres were 241 apart and the table's own top is 245, so the lamp's
+# pole ran straight up through both of its tiers.
+FLOOR_LAMP = (3.34, NY - 0.74)
 REC_A = (2.45, 3.73)           # north recliner  - both face west
 REC_B = (2.45, 2.01)           # south recliner
 # Yaw applied to a chair modelled facing -X (its back slab is at +X), so ZERO

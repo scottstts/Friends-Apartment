@@ -33,6 +33,10 @@ def materials():
     mats.wood("M_StickWood", ['A8804A', 'C6A268', '7E5A2E'], ring=40.0,
               axis='Z', rough=(0.28, 0.50), coat=0.20, scale=2.0)
     mats.plastic("M_StickTape", '1C1C1F', rough=0.62)
+    # mop yarn: cotton, grubby, and very rough - it is the one thing in the
+    # flat that should not catch a highlight anywhere
+    mats.fabric("M_MopYarn", 'C8C0AC', rough=0.96, weave=180.0, sheen=0.12,
+                bump=0.9, fuzz=1.6)
     mats.plastic("M_PhoneWhite", 'E8E4D8', rough=0.34, coat=0.28)
     mats.plastic("M_Plinth", 'E2DED2', rough=0.42, coat=0.12)
 
@@ -361,64 +365,129 @@ def wall_phone():
     return out
 
 
-def hockey_sticks():
-    """Two sticks propped against the wall beside the bathroom door.
+def _mop_head(name, cx, cy, ztop, drop, seed=3, n_out=34, n_in=22):
+    """A yarn mop head: a ferrule, a core, and a bundle of strands hanging the
+    full drop with a ragged hem.
 
-    The shaft is a RECTANGULAR section, which is what a hockey stick is, and
-    the blade is a proper taped blade lying flat on the boards with its heel
-    under the shaft.  The first pass swept both as thin ellipses and put the
-    blade's centreline at z = 0.026 with a half-height of 0.030 - so the lower
-    half of every blade was buried under the floor and the sticks read as two
-    mop handles with a smudge at the bottom.
+    The strands are what make a mop a mop - a single tapered solid is a golf
+    club, which is exactly what the first version of this object was, and no
+    amount of shaping the solid fixes it, because the read comes from the
+    silhouette being ragged rather than smooth.
+
+    Hung on a wall the yarn hangs PLUMB and barely spreads: it flares from the
+    ferrule's 32 mm to about 55 at the hem and no further, and every strand
+    ends at its own height.
+    """
+    rng = random.Random(seed)
+    parts = []
+    # the pressed metal ferrule that clamps the yarn to the handle
+    fer = props.lathe(name + "_f", [(0.0, 0.0), (0.021, 0.0), (0.023, 0.012),
+                                    (0.031, 0.022), (0.032, 0.070),
+                                    (0.024, 0.084), (0.0, 0.086)], 18, C)
+    mlib.translate(fer, (cx, cy, ztop - 0.070))
+    mlib.set_mat(fer, M("M_Rod"))
+    parts.append(fer)
+    # a core, so the head is not see-through between the strands - stopped
+    # well short of the hem, where the strands are all that should be left
+    core = props.sweep_var(name + "_c", [
+        (cx, cy, ztop - 0.010), (cx, cy, ztop - 0.070),
+        (cx, cy, ztop - drop * 0.42), (cx, cy, ztop - drop * 0.66)],
+        [(0.024, 0.024), (0.030, 0.030), (0.032, 0.032), (0.028, 0.028)],
+        16, C, smooth=54)
+    mlib.set_mat(core, M("M_MopYarn"))
+    parts.append(core)
+
+    def strands(count, r0, flare0, flare1, rad, tag):
+        for k in range(count):
+            a = math.tau * k / count + rng.uniform(-0.09, 0.09)
+            drift = rng.uniform(-0.26, 0.26)
+            flare = rng.uniform(flare0, flare1)
+            ln = drop * rng.uniform(0.82, 1.0)      # the hem is never level
+
+            def at(t, rr, aa):
+                return (cx + rr * math.cos(aa), cy + rr * math.sin(aa), t)
+            path = [at(ztop - 0.014, r0 * 0.70, a),
+                    at(ztop - 0.062, r0, a + drift * 0.10),
+                    at(ztop - ln * 0.38, r0 * 1.04 + flare * 0.26,
+                       a + drift * 0.34),
+                    at(ztop - ln * 0.72, r0 * 1.08 + flare * 0.66,
+                       a + drift * 0.68),
+                    at(ztop - ln, r0 * 1.10 + flare, a + drift)]
+            s = mlib.tube_along(name + tag + str(k), path,
+                                mlib.circle(rad, 6), cname=C)
+            mlib.smooth_shade(s, 50)
+            mlib.set_mat(s, M("M_MopYarn"))
+            parts.append(s)
+
+    strands(n_out, 0.025, 0.012, 0.032, 0.0040, "_s")
+    strands(n_in, 0.013, 0.006, 0.020, 0.0036, "_t")
+    return parts
+
+
+def mops():
+    """Two mops HUNG on the wall beside the bathroom door.
+
+    Hung, they are plumb.  Propped against the wall they were vertical enough
+    to read as hanging and tilted enough to look wrong doing it, which is the
+    worst of both - so they are properly hung instead: a bracket each, the
+    handle's own end ring over the hook, and the head swinging clear of the
+    floor.  The bracket stands 78 mm off the plaster, which is what gives the
+    yarn room to hang without brushing the wall.
     """
     out = []
-    FL = 0.0125                # the parquet's top: the blade rests ON it
-    # negative lean, so the TOP of the stick goes towards the wall and the
-    # butt stands out into the room
-    for i, (bx, by, lean, yaw) in enumerate(((3.20, L.NY - 0.212, -8.0, -9.0),
-                                             (3.38, L.NY - 0.246, -9.2, 6.0))):
+    HK = 1.780                 # the hooks' height
+    STAND = 0.078              # how far the hook holds the handle off the wall
+    FZ = 0.335                 # where the ferrule grips the handle
+    for i, (bx, hl, drop) in enumerate(((3.12, 1.404, 0.330),
+                                        (3.31, 1.462, 0.352))):
         parts = []
-        # shaft: 28 x 19, tapering a little towards the blade, as they do
-        shaft = mlib.tube_along("X_StickSh%d" % i, [
-            (0.0, 0.0, 0.055), (0.0, 0.0, 0.560), (0.0, 0.0, 1.060),
-            (0.0, 0.0, 1.432)], mlib.rounded_rect(0.019, 0.028, 0.005, 3),
-            cname=C)
-        mlib.bevel(shaft, 0.002, 2, 44)
-        mlib.set_mat(shaft, M("M_StickWood"))
-        parts.append(shaft)
-        # heel: the short kink that carries the shaft down onto the blade
-        heel = mlib.tube_along("X_StickHl%d" % i, [
-            (0.0, 0.0, 0.098), (0.004, 0.0, FL + 0.052)],
-            mlib.rounded_rect(0.017, 0.026, 0.005, 3), cname=C)
-        mlib.set_mat(heel, M("M_StickTape"))
-        parts.append(heel)
-        # blade: heel to toe along +X, sitting on the boards, with the usual
-        # slight open face and a rounded toe
-        blade = props.sweep_var("X_StickBl%d" % i, [
-            (-0.004, 0.0, FL + 0.040), (0.062, 0.001, FL + 0.037),
-            (0.140, 0.004, FL + 0.034), (0.212, 0.009, FL + 0.032),
-            (0.262, 0.014, FL + 0.026)],
-            [(0.0095, 0.038), (0.0092, 0.036), (0.0086, 0.033),
-             (0.0078, 0.028), (0.0050, 0.017)], 12, C, smooth=48)
-        mlib.set_mat(blade, M("M_StickTape"))
-        parts.append(blade)
-        # tape: a wrap at the top of the shaft and a knob on the butt
-        grip = mlib.tube_along("X_StickGr%d" % i, [
-            (0.0, 0.0, 1.196), (0.0, 0.0, 1.418)],
-            mlib.rounded_rect(0.0215, 0.0305, 0.006, 3), cname=C)
-        mlib.bevel(grip, 0.002, 2, 44)
-        mlib.set_mat(grip, M("M_StickTape"))
-        parts.append(grip)
-        butt = mlib.rounded_box("X_StickBt%d" % i, -0.0125, -0.018, 1.418,
-                                0.0125, 0.018, 1.446, r=0.008, cname=C)
-        mlib.bevel(butt, 0.003, 2, 42)
-        mlib.set_mat(butt, M("M_StickTape"))
-        parts.append(butt)
-        for o in parts:
-            mlib.rot_x(o, math.radians(lean))
-            mlib.rotate_z(o, math.radians(yaw))
-            mlib.translate(o, (bx, by, 0.0))
-            out.append(o)
+        # the bracket: a rose screwed to the plaster and a J-hook off it
+        rose = props.lathe("X_MopRs%d" % i, [(0.0, 0.0), (0.020, 0.0),
+                                             (0.021, 0.005), (0.016, 0.009),
+                                             (0.0, 0.010)], 16, C)
+        props.face_y(rose, -1.0, (bx, L.NY, HK))
+        mlib.set_mat(rose, M("M_Rod"))
+        parts.append(rose)
+        hook = mlib.tube_along("X_MopHk%d" % i, [
+            (bx, L.NY - 0.004, HK), (bx, L.NY - STAND * 0.62, HK),
+            (bx, L.NY - STAND - 0.008, HK - 0.010),
+            (bx, L.NY - STAND - 0.014, HK - 0.030),
+            (bx, L.NY - STAND, HK - 0.044),
+            (bx, L.NY - STAND + 0.020, HK - 0.040)],
+            mlib.circle(0.0038, 8), cname=C)
+        mlib.smooth_shade(hook, 48)
+        mlib.set_mat(hook, M("M_Rod"))
+        parts.append(hook)
+
+        # The mop itself hangs PLUMB from the hook's throat.  Everything below
+        # is built about the handle's axis and then dropped so the end ring
+        # lands on the hook, which is what fixes its height.
+        by = L.NY - STAND
+        zr = HK - 0.026                       # the ring's centre, on the hook
+        base = zr - (hl + 0.050)              # local z -> world z
+        handle = mlib.tube_along("X_MopH%d" % i, [
+            (bx, by, base + FZ - 0.090), (bx, by, base + 0.620),
+            (bx, by, base + 1.020), (bx, by, base + hl)],
+            mlib.circle(0.0125, 12), cname=C)
+        mlib.smooth_shade(handle, 46)
+        mlib.set_mat(handle, M("M_StickWood"))
+        parts.append(handle)
+        cap = props.lathe("X_MopC%d" % i, [(0.0, 0.0), (0.0128, 0.0),
+                                           (0.0132, 0.030), (0.0100, 0.042),
+                                           (0.0, 0.046)], 14, C)
+        mlib.translate(cap, (bx, by, base + hl - 0.004))
+        mlib.set_mat(cap, M("M_StickTape"))
+        parts.append(cap)
+        # the end ring, in the YZ plane so it can actually sit over the hook -
+        # a ring in the plane of the wall could not be threaded onto it
+        ring = props.torus("X_MopR%d" % i, 0.0092, 0.0024, 16, 6, C,
+                           cx=bx, cy=by, cz=zr)
+        mlib.rot_y(ring, math.pi * 0.5, (bx, by, zr))
+        mlib.set_mat(ring, M("M_Rod"))
+        parts.append(ring)
+        parts += _mop_head("X_MopHd%d" % i, bx, by, base + FZ, drop,
+                           seed=11 + i * 7)
+        out += parts
     return out
 
 
@@ -431,5 +500,5 @@ def build():
     foosball()
     bookcase()
     wall_phone()
-    hockey_sticks()
+    mops()
     return len([o for o in bpy.data.objects if o.name.startswith("X_")])

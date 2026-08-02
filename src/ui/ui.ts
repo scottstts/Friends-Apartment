@@ -156,12 +156,12 @@ h1 { margin: 0; }
 .dots i:nth-child(3n+2) { background: #5d8fd3; }
 .dots i:nth-child(3n)   { background: #f0c64a; }
 .intro .dots i { animation: dotwave 1.5s ease-in-out infinite; }
-.dots i:nth-child(1) { animation-delay: 0s; }
-.dots i:nth-child(2) { animation-delay: 0.15s; }
-.dots i:nth-child(3) { animation-delay: 0.3s; }
-.dots i:nth-child(4) { animation-delay: 0.45s; }
-.dots i:nth-child(5) { animation-delay: 0.6s; }
-.dots i:nth-child(6) { animation-delay: 0.75s; }
+.dots i:nth-child(1) { --dot-delay: 0s; animation-delay: var(--dot-delay); }
+.dots i:nth-child(2) { --dot-delay: 0.15s; animation-delay: var(--dot-delay); }
+.dots i:nth-child(3) { --dot-delay: 0.3s; animation-delay: var(--dot-delay); }
+.dots i:nth-child(4) { --dot-delay: 0.45s; animation-delay: var(--dot-delay); }
+.dots i:nth-child(5) { --dot-delay: 0.6s; animation-delay: var(--dot-delay); }
+.dots i:nth-child(6) { --dot-delay: 0.75s; animation-delay: var(--dot-delay); }
 @keyframes dotwave { 0%, 60%, 100% { opacity: 0.25; transform: none; } 30% { opacity: 1; transform: translateY(-3px); } }
 /* Loading done: one unified settle in place of the wave. */
 .intro.ready .dots i { animation: settle 0.55s ease both; opacity: 0.9; transition: opacity 0.8s ease; }
@@ -198,7 +198,7 @@ h1 { margin: 0; }
 .intro.loading { cursor: wait; }
 .intro.loading .door { pointer-events: none; cursor: wait; }
 .intro.loading .enter { opacity: 0.28; }
-.intro.loading .dots i { animation: dotwave 1.15s ease-in-out infinite; }
+.intro.loading .dots i { animation: dotwave 1.5s ease-in-out infinite; animation-delay: var(--dot-delay); }
 .intro.loading19 .doorway.right, .intro.loading20 .doorway.left { opacity: 0.52; transition: opacity 0.45s ease; }
 .intro.loading19 .d19 .underlight, .intro.loading20 .d20 .underlight { animation: loadglow 1.15s ease-in-out infinite; }
 @keyframes loadglow { 0%, 100% { opacity: 0.48; } 50% { opacity: 1; } }

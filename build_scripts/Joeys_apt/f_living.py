@@ -404,7 +404,7 @@ def glass_table():
 def side_table():
     """The white two-tier round table at the couch's east end."""
     out = []
-    cx, cy = 2.86, L.NY - 0.62
+    cx, cy = L.SIDE_T
     for (r, z) in ((0.245, 0.560), (0.215, 0.290)):
         t = props.lathe("V_SideTop", [(0.0, 0.0), (r - 0.014, 0.0),
                                       (r, 0.008), (r - 0.006, 0.019),
@@ -995,7 +995,7 @@ def floor_lamp():
     """A slim uplighter beside the couch - and, once the lighting pass runs, a
     real source with a fixture to justify it."""
     out = []
-    cx, cy = 3.02, L.NY - 0.44
+    cx, cy = L.FLOOR_LAMP
     base = props.lathe("V_LampBase", [(0.0, 0.0), (0.135, 0.0), (0.138, 0.010),
                                       (0.120, 0.020), (0.026, 0.030),
                                       (0.024, 0.050), (0.0, 0.052)], 24, C)

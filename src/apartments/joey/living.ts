@@ -141,7 +141,7 @@ function buildTables(world: World): void {
   mlib.rotateZ(remote,0.5,[gx,gy])
   add(world,remote,M.get('M_TVCase'))
 
-  const sx=2.86, sy=L.NY-0.62
+  const [sx,sy]=L.SIDE_T
   for (const [r,z] of [[0.245,0.56],[0.215,0.29]]) add(world, mlib.translate(P.lathe([[0,0],[r-0.014,0],[r,0.008],[r-0.006,0.019],[0,0.019]],32),[sx,sy,z]),M.get('M_LampShade'))
   add(world,mlib.translate(P.lathe([[0,0],[0.075,0],[0.072,0.014],[0.03,0.04],[0.028,0.54],[0.036,0.56],[0,0.562]],20),[sx,sy,0]),M.get('M_Steel'),true)
 }
@@ -246,7 +246,7 @@ function buildPenguin(world: World): void {
 }
 
 function buildFloorLamp(world: World): void {
-  const cx=3.02,cy=L.NY-0.44
+  const [cx,cy]=L.FLOOR_LAMP
   add(world,mlib.translate(P.lathe([[0,0],[0.135,0],[0.138,0.01],[0.12,0.02],[0.026,0.03],[0.024,0.05],[0,0.052]],24),[cx,cy,0]),M.get('M_Steel'),true)
   add(world,P.rod([cx,cy,0.04],[cx,cy,1.64],0.0145,12),M.get('M_Steel'))
   add(world,mlib.translate(P.lathe([[0,0],[0.154,0],[0.152,0.007],[0.113,0.198],[0.111,0.205],[0.15,0.011],[0,0.011]],30),[cx,cy,1.5]),M.get('M_LampShade'))

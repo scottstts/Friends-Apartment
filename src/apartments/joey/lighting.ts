@@ -2,20 +2,21 @@
 import type * as THREE from 'three/webgpu'
 import { MeshData } from '../../lib/mesh'
 import * as mlib from '../../lib/mlib'
+import { srgbTriple } from '../../mats/tsl'
 import type { World } from '../../scene/world'
 import * as L from './layout'
 import * as M from './materials'
 import * as P from './props'
 
-const GAIN=0.148
-const WARM:[number,number,number]=[1,0.915,0.835]
-const WARM_HOT:[number,number,number]=[1,0.875,0.79]
+const GAIN=0.185
+const WARM=srgbTriple('FFEBD2')
+const WARM_HOT=srgbTriple('FFE8CC')
 const add=(world:World,md:MeshData,material:THREE.Material):MeshData=>world.add(md,material)
 
 function buildMaterials():void {
-  M.emissive('M_BulbGlow','FFF2E6',{strength:6})
-  M.emissive('M_DomeGlow','FFF5EC',{strength:2.4})
-  M.emissive('M_StripGlow','FFF2E6',{strength:3.4})
+  M.emissive('M_BulbGlow','FFE8CC',{strength:6})
+  M.emissive('M_DomeGlow','FFEBD2',{strength:2.4})
+  M.emissive('M_StripGlow','FFE8CC',{strength:3.4})
   M.metal('M_FixBrass','A8842E',{rough:0.3,grime:0.35})
   M.metal('M_FixChrome','D6DADE',{rough:0.1,grime:0.3})
   M.plastic('M_Opal','F0EADA',{rough:0.42,coat:0.2})
@@ -68,17 +69,24 @@ function vanity(world:World):void {
 
 export function build(world:World):void {
   buildMaterials()
-  ceilingRose(world,2.05,5.05,470)
-  ceilingRose(world,2.55,2.2,420)
-  ceilingRose(world,6.55,3.3,520)
-  ceilingRose(world,7.3,1.3,430)
+  const columns=Array.from({length:4},(_,k)=>L.EX*(2*k+1)/8)
+  const rows=Array.from({length:3},(_,k)=>L.SY+(L.NY-L.SY)*(2*k+1)/6)
+  for(let column=0;column<columns.length;column++)for(let row=0;row<rows.length;row++){
+    const cx=columns[column],cy=rows[row]
+    if(cx>L.JX&&cy>L.NY2)continue
+    // All ten authored fixtures illuminate the room. WebGPU exposes only 16
+    // fragment samplers on baseline hardware, so alternate roses own the five
+    // evenly distributed shadow maps; otherwise textured materials require
+    // 19 samplers and their pipelines cannot be created at all.
+    ceilingRose(world,cx,cy,300,L.CZ,(column+row)%2===0)
+  }
   sconce(world)
-  bulb(world,[3.02,L.NY-0.44,1.52],320)
+  bulb(world,[L.FLOOR_LAMP[0],L.FLOOR_LAMP[1],1.52],320)
   kitchenStrips(world)
   bulb(world,[L.JO_X[0]+0.3,1.72,0.87],135)
   bulb(world,[L.CH_X[0]+0.3,3.42,0.87],135)
-  ceilingRose(world,L.JO_X[0]+1.8,0.7,250,L.CZ,false)
-  ceilingRose(world,L.CH_X[0]+1.8,4.6,250,L.CZ,false)
+  ceilingRose(world,(L.JO_X[0]+L.JO_X[1])*0.5,(L.JO_Y[0]+L.JO_Y[1])*0.5,290,L.CZ,false)
+  ceilingRose(world,(L.CH_X[0]+L.CH_X[1])*0.5,(L.CH_Y[0]+L.CH_Y[1])*0.5,290,L.CZ,false)
   vanity(world)
   ceilingRose(world,(L.BA_X[0]+L.BA_X[1])*0.5,(L.BA_Y[0]+L.BA_Y[1])*0.5,185,L.BA_CZ,false)
 }
