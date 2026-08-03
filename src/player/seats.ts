@@ -10,11 +10,11 @@
  * the bottom, a lean-forward push-up on rising, and a seated breathing sway.
  *
  * Seat geometry is derived from the same layout constants the furniture is
- * built from (src/lib/L.ts, ports of build_scripts/L.py), so the eye comes to
+ * built from (src/scenes/monica/L.ts, ports of build_scripts/L.py), so the eye comes to
  * rest exactly over each authored seating area. */
 import type * as THREE from 'three/webgpu'
-import * as L from '../lib/L'
-import type { ApartmentInteractions, CouchSpec } from '../apartments/types'
+import * as L from '../scenes/monica/L'
+import type { ApartmentInteractions, CouchSpec } from '../scenes/types'
 import { EYE, applyPose, type PlayerControls } from './controls'
 import { SeatHint } from './hint'
 
@@ -137,7 +137,7 @@ function buildTargets(): SeatTarget[] {
   // --- sofa: three cushions, faces +X down the flat's axis ------------------
   {
     const [cx, cy] = L.SOFA_C
-    const aw = 0.185 // arm width, as the sofa is built in scene/living.ts
+    const aw = 0.185 // arm width, as the sofa is built in scenes/monica/living.ts
     const pitch = (L.SOFA_L - 2 * aw) / 3
     // cushion top 0.575, sunk under weight, plus a seated torso
     const eyeZ = 1.245

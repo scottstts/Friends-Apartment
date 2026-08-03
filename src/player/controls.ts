@@ -2,7 +2,7 @@
  * circle-vs-OBB collision against walls and furniture, and a walking bob.
  * No sprint, no jump; the player is just the camera. */
 import * as THREE from 'three/webgpu'
-import type { Obb } from '../scene/world'
+import type { Obb } from '../core/world'
 
 export const EYE = 1.62
 const RADIUS = 0.24

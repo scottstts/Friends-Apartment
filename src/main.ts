@@ -1,19 +1,19 @@
 /** WebGPU apartment runtime: shared renderer and image pipeline at startup,
  * apartment-owned worlds imported, built, compiled and cached only after the
  * corresponding hallway door is chosen. */
-import './scene/shadows'
+import './core/shadows'
 import * as THREE from 'three/webgpu'
 import { mix, mrt, normalView, output, pass, renderOutput, vec4 } from 'three/tsl'
 import { bloom } from 'three/examples/jsm/tsl/display/BloomNode.js'
 import { ao } from 'three/examples/jsm/tsl/display/GTAONode.js'
-import { loadApartmentDefinition } from './apartments'
-import type { ApartmentDefinition, ApartmentId } from './apartments/types'
-import { World } from './scene/world'
+import { loadApartmentDefinition } from './scenes'
+import type { ApartmentDefinition, ApartmentId } from './scenes/types'
+import { World } from './core/world'
 import { PlayerControls } from './player/controls'
 import type { SeatingSystem } from './player/seats'
 import { Ui } from './ui/ui'
-import { blenderFilmicVeryHighContrast } from './filmic'
-import { isDesktopChromium } from './platform'
+import { blenderFilmicVeryHighContrast } from './core/filmic'
+import { isDesktopChromium } from './core/platform'
 
 interface GpuProbe {
   requestAdapter():Promise<{limits:{maxSampledTexturesPerShaderStage:number;maxSamplersPerShaderStage:number}}|null>

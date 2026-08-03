@@ -24,7 +24,7 @@
  * the ornate doorbell over the frozen frame; the unsupported-browser page
  * hangs the peephole-frame art over a green door. */
 
-import type { ApartmentId } from '../apartments/types'
+import type { ApartmentId } from '../scenes/types'
 
 export interface UiHooks {
   onEnter: (apartment: ApartmentId) => void
