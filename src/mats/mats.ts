@@ -408,7 +408,9 @@ export function brickWall(
     const brk = mix(brColor, tone, 0.62)
     const grit = bnoise(mp, 190.0, 6.0, 0.7)
     const fine = bnoise(mp, 760.0, 3.0, 0.5)
-    const gcol = mix(brk, mul(brk, vec3(0.35, 0.3, 0.28)), mul(grit, 0.16))
+    // the .py sets Factor's default after linking grit; a linked socket wins,
+    // so the graph evaluates the MULTIPLY mix with the full grit factor
+    const gcol = mix(brk, mul(brk, vec3(0.35, 0.3, 0.28)), grit)
     const mortarMask = rampF(br.fac, [
       [0.15, 0.0],
       [0.65, 1.0],

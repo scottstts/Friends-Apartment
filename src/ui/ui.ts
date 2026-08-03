@@ -11,8 +11,8 @@
  * blind-drawn window glowing on the far wall, the radiator beneath it, and
  * beside apartment 19 the hallway turns left, warm light washing around the
  * corner and across the floor.  That turn is the third doorway - a small
- * gold arrow and the word CENTRAL PERK wait before it, and taking it goes
- * down to the coffee house.
+ * gold arrow over the coffee-house sign and its name wait before it, and
+ * taking it goes down to the coffee house.
  *
  * While the scene builds the six logo dots pulse; when the game is ready the
  * dots settle, a band of hallway light passes over each door and the
@@ -360,6 +360,10 @@ h1 { margin: 0; }
   transition: opacity 0.5s ease, transform 0.4s cubic-bezier(0.22, 0.61, 0.36, 1), color 0.3s ease;
 }
 .perk span { display: block; }
+/* The sign and the name sit as one centred piece; every reveal, hover and
+ * loading state styles the parent, so the pair always moves together. */
+.perk .row { display: flex; align-items: center; justify-content: center; gap: 0.9em; }
+.perkicon { height: 2.8em; width: auto; filter: drop-shadow(0 1px 2px rgba(10,7,3,0.6)); }
 .ready .perk { opacity: 0.92; transform: none; }
 .ready .perk::after { transform: scaleX(1); }
 .intro.ready .bay:hover .perk { color: #f7d98d; opacity: 1; transform: translateY(-0.35vh) scale(1.055); }
@@ -633,7 +637,7 @@ export class Ui {
           <div class="hot hot20" role="button" tabindex="0" aria-label="Enter apartment 20"></div>
           <div class="bay" role="button" tabindex="0" aria-label="Enter Central Perk">
             <div class="wayup" aria-hidden="true"><svg viewBox="0 0 28 40" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="awG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f0d489"/><stop offset="1" stop-color="#b9903c"/></linearGradient></defs><g fill="none" stroke="url(#awG)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 37 V9"/><path d="M5 18 L14 7 L23 18"/></g></svg></div>
-            <p class="cta perk"><span class="main">Central Perk</span></p>
+            <p class="cta perk"><span class="row"><img class="perkicon" src="/central_perk_icon.png" alt="" draggable="false"><span class="main">Central Perk</span></span></p>
           </div>
         </div>
       </div>`)
