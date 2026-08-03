@@ -706,6 +706,56 @@ export function flatShade(m: MeshData): MeshData {
   return m
 }
 
+/** Dissolve zero-area faces and weld coincident vertices (mlib.clean_mesh).
+ * Lofts and joins leave both behind wherever a ring collapses - the fold at
+ * the top of a bag, a ridge a wrap closes on - and shading breaks along the
+ * whole edge loop when a normal is asked for there. */
+export function cleanMesh(m: MeshData, dist = 2e-5): MeshData {
+  const remap = new Array<number>(m.verts.length)
+  const seen = new Map<string, number>()
+  const verts: Vec3[] = []
+  const colors: Vec3[] | null = m.colors ? [] : null
+  for (let i = 0; i < m.verts.length; i++) {
+    const v = m.verts[i]
+    const key = `${Math.round(v[0] / dist)},${Math.round(v[1] / dist)},${Math.round(v[2] / dist)}`
+    let idx = seen.get(key)
+    if (idx === undefined) {
+      idx = verts.length
+      seen.set(key, idx)
+      verts.push(v)
+      if (colors && m.colors) colors.push(m.colors[i])
+    }
+    remap[i] = idx
+  }
+  const faces: number[][] = []
+  const uvs: (Vec2[] | null)[] | null = m.uvs ? [] : null
+  const faceMat: number[] | null = m.faceMat ? [] : null
+  m.faces.forEach((face, fi) => {
+    const ff: number[] = []
+    const fuv: Vec2[] = []
+    face.forEach((vi, c) => {
+      const mi = remap[vi]
+      if (!ff.includes(mi)) {
+        ff.push(mi)
+        const src = m.uvs?.[fi]
+        if (src) fuv.push(src[c])
+      }
+    })
+    if (ff.length < 3) return
+    if (len(faceNormal(verts, ff)) < 1e-12) return
+    faces.push(ff)
+    if (uvs) uvs.push(m.uvs?.[fi] ? fuv : null)
+    if (faceMat && m.faceMat) faceMat.push(m.faceMat[fi])
+  })
+  m.verts = verts
+  m.faces = faces
+  m.uvs = uvs
+  m.colors = colors
+  m.faceMat = faceMat
+  m.provenance = null
+  return m
+}
+
 /** Triangulate into a non-indexed BufferGeometry with angle-threshold smooth
  * normals (the Blender 4.x smooth-by-angle port). */
 export function toGeometry(m: MeshData): THREE.BufferGeometry {

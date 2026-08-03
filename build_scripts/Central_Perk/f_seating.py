@@ -122,8 +122,17 @@ def tufted_back(name, ln, h_end, h_mid, y_in, thick, lean=0.09, bow=0.028,
     of the back is a plain shell offset by `thick`, so the two are one
     watertight mesh rather than a surface with solidify guessing at it."""
     buttons = button_lattice(nbu, nbv)
+    # The crest is a ROLL, not a lid.  Closing the top ring with one cap face
+    # made a 242-sided n-gon 115 mm out of plane - Blender fan-triangulates
+    # any n-gon, and that fan, shaded across a curved crest, is what read as
+    # a crease running the length of the back.  So the buttoned panel now
+    # stops one roll-radius short of the crest line and a run of rings arcs
+    # over the top, front face to back face, closing on the ridge.  Same at
+    # the bottom, where the cover tucks under the rail.  Nothing is capped;
+    # every face in the piece is a quad or a ridge triangle.
+    rr = thick * 0.5
     # the panel's real extent, so the button lattice can be measured in metres
-    bh = h_mid - seat_z
+    bh = h_mid - rr - seat_z
     bm = [(bu * ln, bv * bh) for (bu, bv) in buttons]
     # sigma: a shade over half the smaller button pitch, so the cones from
     # neighbouring buttons meet and crease instead of flattening out first
@@ -131,6 +140,7 @@ def tufted_back(name, ln, h_end, h_mid, y_in, thick, lean=0.09, bow=0.028,
     pv = 0.64 * bh / max(1, nbv - 1) if nbv > 1 else pu
     sigma = min(pu, pv) * 0.68
     rings = []
+    lvl_lo = lvl_hi = None
     for j in range(nv):
         v = j / (nv - 1)
         front, back = [], []
@@ -138,7 +148,7 @@ def tufted_back(name, ln, h_end, h_mid, y_in, thick, lean=0.09, bow=0.028,
             u = i / (nu - 1)
             x = (u - 0.5) * ln
             crest = h_end + (h_mid - h_end) * math.sin(math.pi * u) ** 0.55
-            z = seat_z + v * (crest - seat_z)
+            z = seat_z + v * (crest - rr - seat_z)
             # plan: leans back with height, bows out across the width
             ybase = y_in + lean * v * v + bow * math.sin(math.pi * u)
             # the cover is only buttoned inside a plain border
@@ -161,28 +171,63 @@ def tufted_back(name, ln, h_end, h_mid, y_in, thick, lean=0.09, bow=0.028,
             if chan:
                 ph = (u - 0.10) * 2.0 * (nbu - 1) / 0.80
                 d *= (1.0 - chan) + 2.0 * chan * (0.5 + 0.5 * math.cos(TAU * ph))
-            # the crest itself rolls over, so pull the top ring forward
-            roll = 0.030 * max(0.0, (v - 0.90) / 0.10) ** 2
-            front.append((x, ybase - d - roll, z))
+            front.append((x, ybase - d, z))
             # outer shell: plain, and it swells slightly at mid height
             swell = 0.016 * math.sin(math.pi * v)
             back.append((x, ybase + thick + swell, z))
         rings.append(front + back[::-1])
+        if j == 0:
+            lvl_lo = (front[:], back[:])
+        if j == nv - 1:
+            lvl_hi = (front[:], back[:])
+
+    def _wrap(level, up, n):
+        """Arc the section from its two faces round onto its own centre line.
+
+        At the top the tufting is already damped to nothing by the border, so
+        the two faces are exactly `thick` apart there and the arc is a true
+        half-round of radius rr.  The last ring closes on the ridge; the weld
+        at the end turns that into one edge loop rather than a zero-width
+        strip."""
+        f0, b0 = level
+        out = []
+        for k in range(1, n + 1):
+            a = (k / n) * (math.pi / 2)
+            ca, sa = math.cos(a), math.sin(a)
+            fr, bk = [], []
+            for i in range(nu):
+                yf, yb = f0[i][1], b0[i][1]
+                yc, r = 0.5 * (yf + yb), 0.5 * (yb - yf)
+                z = f0[i][2] + up * r * sa
+                fr.append((f0[i][0], yc - r * ca, z))
+                bk.append((b0[i][0], yc + r * ca, z))
+            out.append(fr + bk[::-1])
+        return out
+
+    # 6 rings is 15 degrees a step, well inside the 46 degree auto-smooth, so
+    # the roll shades as a round rather than as facets
+    rings = _wrap(lvl_lo, -1, 3)[::-1] + rings + _wrap(lvl_hi, +1, 6)
     ob = M._loft(name, rings, close_u=False, close_v=True, cname=cname,
-                 cap_start=True, cap_end=True)
+                 cap_start=False, cap_end=False)
+    M.clean_mesh(ob)
     M.smooth_shade(ob, 46)
     return ob, buttons
 
 
 def buttons_on(name, buttons, ln, h_end, h_mid, y_in, lean, bow, tuft,
-               seat_z=0.30, r=0.021, cname=C):
+               seat_z=0.30, r=0.021, cname=C, crest_r=0.0):
     """A covered button sunk into each pucker.  Modelled as a shallow dome on
-    a shank so it catches a highlight - a flat disc disappears."""
+    a shank so it catches a highlight - a flat disc disappears.
+
+    `crest_r` is tufted_back's roll radius and must be the same number: the
+    buttons are placed by re-evaluating that surface's own equation, so if
+    the panel stops short of the crest and the buttons do not, the top row
+    floats off the cover."""
     out = []
     for k, (u, v) in enumerate(buttons):
         x = (u - 0.5) * ln
         crest = h_end + (h_mid - h_end) * math.sin(math.pi * u) ** 0.55
-        z = seat_z + v * (crest - seat_z)
+        z = seat_z + v * (crest - crest_r - seat_z)
         y = y_in + lean * v * v + bow * math.sin(math.pi * u)
         b = M.revolve(name + "_%02d" % k,
                       [(0.0, 0.0), (r * 0.55, 0.001), (r, 0.006),
@@ -374,7 +419,7 @@ def hero_couch(name="Couch_orange", ln=2.24, dp=0.92, cname=C):
     parts_v.append(back)
     parts_v += buttons_on(name + "_btn", buttons, inner + 0.04, 0.845, 0.960,
                           y_in, lean, bow, tuft, seat_z=0.300, r=0.026,
-                          cname=cname)
+                          cname=cname, crest_r=0.160 * 0.5)
 
     # -- arms ---------------------------------------------------------------
     for s in (-1, 1):
@@ -454,7 +499,7 @@ def settee(name, ln=1.62, dp=0.78, cname=C, cover='damask_gold',
     pv.append(back)
     pv += buttons_on(name + "_btn", buttons, inner + 0.03, back_h - 0.055,
                      back_h, y_in, lean, bow, tuft, seat_z=seat_z - 0.045,
-                     r=0.014, cname=cname)
+                     r=0.014, cname=cname, crest_r=0.130 * 0.5)
 
     for s in (-1, 1):
         a, _ = scroll_arm(name + "_arm%d" % s, s * (inner / 2 - 0.004),

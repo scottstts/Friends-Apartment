@@ -619,7 +619,7 @@ function insetPolyLocal(poly: Vec2[], d: number): Vec2[] {
 }
 
 // re-exports so scene code can `import * as mlib`
-export { translate, rotateZ, rotX, rotY, scaleMesh, transform4, join, recalcNormals, smoothShade, flatShade } from './mesh'
+export { translate, rotateZ, rotX, rotY, scaleMesh, transform4, join, recalcNormals, smoothShade, flatShade, cleanMesh } from './mesh'
 export { MeshData } from './mesh'
 export const bevel = mBevel
 export const solidify = mSolidify

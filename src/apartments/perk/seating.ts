@@ -74,16 +74,28 @@ interface TuftOpts {
   chan?: number
 }
 
-/** The buttoned inside of a sofa back as one closed solid. */
+/** The buttoned inside of a sofa back as one closed solid.
+ *
+ * The crest is a ROLL, not a lid.  Capping the top ring fan-triangulated an
+ * n-gon 115 mm out of plane, and that fan, shaded across a curved crest, read
+ * as a crease running the length of the back.  So the buttoned panel stops
+ * one roll-radius short of the crest line and a run of rings arcs over the
+ * top, front face to back face, closing on the ridge.  Same at the bottom,
+ * where the cover tucks under the rail.  Nothing is capped; every face in
+ * the piece is a quad or a ridge triangle. */
 function tuftedBack(ln: number, hEnd: number, hMid: number, yIn: number, thick: number, o: TuftOpts = {}): { md: MeshData; buttons: [number, number][] } {
   const { lean = 0.09, bow = 0.028, nbu = 7, nbv = 3, tuft = 0.052, nu = 97, nv = 33, seatZ = 0.3, border = 0.055, chan = 0 } = o
   const buttons = buttonLattice(nbu, nbv)
-  const bh = hMid - seatZ
+  const rr = thick * 0.5
+  // the panel's real extent, so the button lattice can be measured in metres
+  const bh = hMid - rr - seatZ
   const bm: [number, number][] = buttons.map(([bu, bv]) => [bu * ln, bv * bh])
   const pu = (0.8 * ln) / Math.max(1, nbu - 1)
   const pv = nbv > 1 ? (0.64 * bh) / Math.max(1, nbv - 1) : pu
   const sigma = Math.min(pu, pv) * 0.68
   const rings: Vec3[][] = []
+  let lvlLo: [Vec3[], Vec3[]] = [[], []]
+  let lvlHi: [Vec3[], Vec3[]] = [[], []]
   for (let j = 0; j < nv; j++) {
     const v = j / (nv - 1)
     const front: Vec3[] = []
@@ -92,7 +104,7 @@ function tuftedBack(ln: number, hEnd: number, hMid: number, yIn: number, thick: 
       const u = i / (nu - 1)
       const x = (u - 0.5) * ln
       const crest = hEnd + (hMid - hEnd) * Math.sin(Math.PI * u) ** 0.55
-      const z = seatZ + v * (crest - seatZ)
+      const z = seatZ + v * (crest - rr - seatZ)
       const ybase = yIn + lean * v * v + bow * Math.sin(Math.PI * u)
       const eu = border ? Math.min(u, 1 - u) / border : 1
       const ev = border ? Math.min(v / border, (1 - v) / (border * 1.6)) : 1
@@ -104,18 +116,51 @@ function tuftedBack(ln: number, hEnd: number, hMid: number, yIn: number, thick: 
         const ph = (((u - 0.1) * 2 * (nbu - 1)) / 0.8) * TAU * 0.5
         d *= 1 - chan + 2 * chan * (0.5 + 0.5 * Math.cos(ph * 2))
       }
-      const roll = 0.03 * Math.max(0, (v - 0.9) / 0.1) ** 2
-      front.push([x, ybase - d - roll, z])
+      front.push([x, ybase - d, z])
       const swell = 0.016 * Math.sin(Math.PI * v)
       back.push([x, ybase + thick + swell, z])
     }
+    if (j === 0) lvlLo = [front.slice(), back.slice()]
+    if (j === nv - 1) lvlHi = [front.slice(), back.slice()]
     rings.push([...front, ...back.reverse()])
   }
-  const md = mlib.loft(rings, { closeV: true, capStart: true, capEnd: true })
+  /** Arc the section from its two faces round onto its own centre line.  At
+   * the levels the tufting is damped to nothing by the border, so the faces
+   * sit exactly `thick` apart and the arc is a true half-round of radius rr.
+   * The last ring closes on the ridge; cleanMesh welds that into one edge
+   * loop rather than a zero-width strip. */
+  const wrap = (level: [Vec3[], Vec3[]], up: number, n: number): Vec3[][] => {
+    const [f0, b0] = level
+    const out: Vec3[][] = []
+    for (let k = 1; k <= n; k++) {
+      const a = (k / n) * (Math.PI / 2)
+      const ca = Math.cos(a)
+      const sa = Math.sin(a)
+      const fr: Vec3[] = []
+      const bk: Vec3[] = []
+      for (let i = 0; i < nu; i++) {
+        const yc = 0.5 * (f0[i][1] + b0[i][1])
+        const r = 0.5 * (b0[i][1] - f0[i][1])
+        const z = f0[i][2] + up * r * sa
+        fr.push([f0[i][0], yc - r * ca, z])
+        bk.push([b0[i][0], yc + r * ca, z])
+      }
+      out.push([...fr, ...bk.reverse()])
+    }
+    return out
+  }
+  // 6 rings is 15 degrees a step, well inside the 46 degree smooth angle, so
+  // the roll shades as a round rather than as facets
+  const md = mlib.loft([...wrap(lvlLo, -1, 3).reverse(), ...rings, ...wrap(lvlHi, 1, 6)], { closeV: true })
+  mlib.cleanMesh(md)
   mlib.smoothShade(md, 46)
   return { md, buttons }
 }
 
+/** `crestR` is tuftedBack's roll radius and must be the same number: the
+ * buttons are placed by re-evaluating that surface's own equation, so if the
+ * panel stops short of the crest and the buttons do not, the top row floats
+ * off the cover. */
 function buttonsOn(
   buttons: [number, number][],
   ln: number,
@@ -126,12 +171,13 @@ function buttonsOn(
   bow: number,
   seatZ = 0.3,
   r = 0.021,
+  crestR = 0,
 ): MeshData[] {
   const out: MeshData[] = []
   for (const [u, v] of buttons) {
     const x = (u - 0.5) * ln
     const crest = hEnd + (hMid - hEnd) * Math.sin(Math.PI * u) ** 0.55
-    const z = seatZ + v * (crest - seatZ)
+    const z = seatZ + v * (crest - crestR - seatZ)
     const y = yIn + lean * v * v + bow * Math.sin(Math.PI * u)
     const b = mlib.revolve(
       [
@@ -358,7 +404,7 @@ export function heroCouch(ln = 2.24, dp = 0.92): Placed[] {
     nv: 41,
   })
   pv.push(back.md)
-  pv.push(...buttonsOn(back.buttons, inner + 0.04, 0.845, 0.96, yIn, lean, bow, 0.3, 0.026))
+  pv.push(...buttonsOn(back.buttons, inner + 0.04, 0.845, 0.96, yIn, lean, bow, 0.3, 0.026, 0.16 * 0.5))
 
   for (const s of [-1, 1]) {
     const arm = scrollArm(s * (inner / 2 - 0.004), s * (ln / 2), yb - 0.05, yf + 0.048, 0.24, armTop + 0.042, 0.166)
@@ -473,7 +519,7 @@ export function settee(ln = 1.62, dp = 0.78, o: SetteeOpts = {}): Placed[] {
     nv: 25,
   })
   pv.push(back.md)
-  pv.push(...buttonsOn(back.buttons, inner + 0.03, backH - 0.055, backH, yIn, lean, bow, seatZ - 0.045, 0.014))
+  pv.push(...buttonsOn(back.buttons, inner + 0.03, backH - 0.055, backH, yIn, lean, bow, seatZ - 0.045, 0.014, 0.13 * 0.5))
 
   for (const s of [-1, 1]) {
     const arm = scrollArm(s * (inner / 2 - 0.004), s * (ln / 2), yb - 0.045, yf + 0.042, 0.22, seatH + 0.17, 0.128)
