@@ -37,6 +37,9 @@ export class PlayerControls {
   private keys = new Set<string>()
   private bobPhase = 0
   private bobAmp = 0
+  /** Walkable floor height sampler (raised platforms); flat scenes omit it. */
+  private groundFn: ((x: number, y: number) => number) | null = null
+  private floorZ = 0
   enabled = false
   /** While true an external director (the seating system) owns the pose and
    * the camera; walking, collision and the bob all stand down. */
@@ -67,11 +70,18 @@ export class PlayerControls {
     this.vel.set(0, 0)
   }
 
+  /** Swap the active apartment's floor-height sampler (default flat). */
+  setGround(fn?: (x: number, y: number) => number): void {
+    this.groundFn = fn ?? null
+    this.floorZ = this.groundFn ? this.groundFn(this.pos.x, this.pos.y) : 0
+  }
+
   /** Spawn just inside the front door, looking down the flat (CAM_master). */
   spawn(x = 2.3, y = -0.55, lookX = 6.4, lookY = 3.9): void {
     this.pos.set(x, y)
     this.yaw = Math.atan2(lookY - y, lookX - x) - Math.PI / 2
     this.pitch = -0.04
+    this.floorZ = this.groundFn ? this.groundFn(x, y) : 0
     this.syncCamera(0)
   }
 
@@ -90,6 +100,7 @@ export class PlayerControls {
     this.pos.set(x, y)
     this.vel.set(0, 0)
     this.bobAmp = 0
+    this.floorZ = this.groundFn ? this.groundFn(x, y) : 0
     this.setLook(yaw, pitch)
   }
 
@@ -118,6 +129,12 @@ export class PlayerControls {
     const step = this.vel.clone().multiplyScalar(dt)
     this.pos.add(step)
     this.resolveCollisions()
+    // step transitions (the bay platform) ease in rather than snapping
+    if (this.groundFn) {
+      const target = this.groundFn(this.pos.x, this.pos.y)
+      this.floorZ += (target - this.floorZ) * Math.min(1, 9 * dt)
+      if (Math.abs(target - this.floorZ) < 1e-4) this.floorZ = target
+    }
     // head bob: speed-scaled, eases out when stopping
     const speed = this.vel.length()
     const target = Math.min(1, speed / SPEED)
@@ -179,7 +196,7 @@ export class PlayerControls {
       this.camera,
       this.pos.x + Math.cos(this.yaw) * bobX,
       this.pos.y + Math.sin(this.yaw) * bobX,
-      EYE + bobZ,
+      EYE + this.floorZ + bobZ,
       this.yaw,
       this.pitch,
       rollT,

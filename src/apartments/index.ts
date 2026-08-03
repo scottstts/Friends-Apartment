@@ -3,6 +3,7 @@ import type { ApartmentDefinition, ApartmentId } from './types'
 const importers:Record<ApartmentId,()=>Promise<ApartmentDefinition>>={
   '19':async()=>(await import('./joey')).joeyApartment,
   '20':async()=>(await import('./monica')).monicaApartment,
+  'perk':async()=>(await import('./perk')).perkApartment,
 }
 
 /** Dynamic module promises are retained for the life of the page. Together

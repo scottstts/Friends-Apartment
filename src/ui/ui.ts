@@ -11,31 +11,28 @@
  * blind-drawn window glowing on the far wall, the radiator beneath it, and
  * beside apartment 19 the hallway turns left, warm light washing around the
  * corner and across the floor.  That turn is the third doorway - a small
- * gold arrow and the word CENTRAL PERK wait before it and answer "coming
- * soon" until the coffee house exists around the corner.
+ * gold arrow and the word CENTRAL PERK wait before it, and taking it goes
+ * down to the coffee house.
  *
  * While the scene builds the six logo dots pulse; when the game is ready the
  * dots settle, a band of hallway light passes over each door and the
  * underlight warms beneath both apartments.  A hovered doorway leans
  * forward, frame and all; choosing one fades the landing to black and lifts
- * the black into the apartment scene.  Walking back to the front door in
- * game returns to this landing.  Pause is the ornate doorbell over the
- * frozen frame; the unsupported-browser page hangs the peephole-frame art
- * over a green door. */
+ * the black into the apartment scene.  Choosing the turn instead fades both
+ * front doors while the arrow and the destination's name hold the floor.
+ * Walking back to the front door in game returns to this landing.  Pause is
+ * the ornate doorbell over the frozen frame; the unsupported-browser page
+ * hangs the peephole-frame art over a green door. */
 
 import type { ApartmentId } from '../apartments/types'
 
 export interface UiHooks {
   onEnter: (apartment: ApartmentId) => void
   onResume: () => void
-  /** Future third scene downstairs; until wired the UI answers coming soon. */
-  onCentralPerk?: () => void
 }
 
 /* Fade-to-black-then-scene duration; the CSS transitions below sum to it. */
 const OPEN_MS = 900
-/* How long the hallway turn holds its "coming soon" answer. */
-const SOON_MS = 2400
 
 const GRAIN =
   'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter><rect width="180" height="180" filter="url(%23n)" opacity="0.05"/></svg>\')'
@@ -283,13 +280,15 @@ canvas { display: block; }
 }
 .intro.ready .bay:hover .wayup { opacity: 1; }
 .intro:not(.ready) .bay, .intro:not(.ready) .hot, .intro.loading .bay { pointer-events: none; }
-/* Once a door is chosen the third destination leaves the stage entirely. */
-.intro.loading .bay, .intro.open .bay { opacity: 0; }
+/* Once a front door is chosen the third destination leaves the stage; when
+ * the turn itself is taken, the arrow and the name keep the floor instead. */
+.intro.loading19 .bay, .intro.loading20 .bay, .intro.open .bay { opacity: 0; }
 .intro.ready .bay { cursor: pointer; }
 .intro.ready:has(.bay:hover) .bayglow { opacity: 1; }
-.intro:has(.bay.soon) .bayglow { animation: perkpulse 1.15s ease; }
+.intro.loadingperk .bayglow { animation: perkpulse 1.15s ease-in-out infinite; }
+/* The surviving arrow and name hold still while the coffee house loads. */
+.intro.loadingperk .wayup svg { animation: none; }
 @keyframes perkpulse { 0%, 100% { opacity: 0.8; } 40% { opacity: 1; } }
-.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 
 /* ---- centre column (fatal page) ---- */
 .stack {
@@ -352,8 +351,7 @@ h1 { margin: 0; }
 }
 .cta.show { opacity: 0.92; transform: none; }
 .cta.show::after { transform: scaleX(1); }
-/* The destination on the floor before the turn; its answer crossfades in
- * place. */
+/* The destination on the floor before the turn. */
 .perk {
   position: absolute; left: 0; right: 0; bottom: 0.5vh;
   pointer-events: none; text-align: center;
@@ -361,10 +359,7 @@ h1 { margin: 0; }
   transform-origin: 50% 100%;
   transition: opacity 0.5s ease, transform 0.4s cubic-bezier(0.22, 0.61, 0.36, 1), color 0.3s ease;
 }
-.perk span { display: block; transition: opacity 0.45s ease; }
-.perk .alt { position: absolute; left: 0; right: 0; top: 0; opacity: 0; }
-.bay.soon .perk .main { opacity: 0; }
-.bay.soon .perk .alt { opacity: 1; }
+.perk span { display: block; }
 .ready .perk { opacity: 0.92; transform: none; }
 .ready .perk::after { transform: scaleX(1); }
 .intro.ready .bay:hover .perk { color: #f7d98d; opacity: 1; transform: translateY(-0.35vh) scale(1.055); }
@@ -379,7 +374,8 @@ h1 { margin: 0; }
 .intro.loading { cursor: wait; }
 .intro.loading .hot { pointer-events: none; cursor: wait; }
 .intro.loading .dots i { animation: dotwave 1.5s ease-in-out infinite; animation-delay: var(--dot-delay); }
-.intro.loading19 .doorway.right, .intro.loading20 .doorway.left { opacity: 0.52; transition: opacity 0.45s ease; }
+.intro.loading19 .doorway.right, .intro.loading20 .doorway.left,
+.intro.loadingperk .doorway.left, .intro.loadingperk .doorway.right { opacity: 0.52; transition: opacity 0.45s ease; }
 .intro.loading19 .d19 .underlight, .intro.loading20 .d20 .underlight { animation: loadglow 1.15s ease-in-out infinite; }
 @keyframes loadglow { 0%, 100% { opacity: 0.48; } 50% { opacity: 1; } }
 .pause { cursor: pointer; }
@@ -429,7 +425,7 @@ h1 { margin: 0; }
 
 @media (prefers-reduced-motion: reduce) {
   .intro .view, .intro .titles, .intro .doorway.left, .intro .doorway.right, .intro .bay,
-  .intro:has(.bay.soon) .bayglow, .intro.ready .wayup svg, .fatal .emblem, .fatal .msg,
+  .intro.loadingperk .bayglow, .intro.ready .wayup svg, .fatal .emblem, .fatal .msg,
   .intro .dots i, .intro .door::after, .veil.pause .stack, .pause:hover .bell svg { animation: none !important; }
 }
 `
@@ -584,15 +580,12 @@ export class Ui {
   private intro: HTMLDivElement
   private pause: HTMLDivElement
   private enterDoors: Record<ApartmentId, HTMLElement>
-  private bay: HTMLElement
-  private srLive: HTMLElement
   private hooks: UiHooks
   private isReady = false
   private opened = false
   private entered = false
   private loading = false
   private hideTimer = 0
-  private soonTimer = 0
   private selected: ApartmentId = '20'
 
   constructor(hooks: UiHooks) {
@@ -638,40 +631,24 @@ export class Ui {
           </header>
           <div class="hot hot19" role="button" tabindex="0" aria-label="Enter apartment 19"></div>
           <div class="hot hot20" role="button" tabindex="0" aria-label="Enter apartment 20"></div>
-          <div class="bay" role="button" tabindex="0" aria-label="Central Perk">
+          <div class="bay" role="button" tabindex="0" aria-label="Enter Central Perk">
             <div class="wayup" aria-hidden="true"><svg viewBox="0 0 28 40" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="awG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f0d489"/><stop offset="1" stop-color="#b9903c"/></linearGradient></defs><g fill="none" stroke="url(#awG)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 37 V9"/><path d="M5 18 L14 7 L23 18"/></g></svg></div>
-            <p class="cta perk"><span class="main">Central Perk</span><span class="alt">Coming Soon&hellip;</span></p>
-            <span class="sr" aria-live="polite"></span>
+            <p class="cta perk"><span class="main">Central Perk</span></p>
           </div>
         </div>
       </div>`)
     this.enterDoors = {
       '19': this.intro.querySelector('.hot19') as HTMLElement,
       '20': this.intro.querySelector('.hot20') as HTMLElement,
+      'perk': this.intro.querySelector('.bay') as HTMLElement,
     }
-    for (const id of ['19', '20'] as const) {
+    for (const id of ['19', '20', 'perk'] as const) {
       activate(this.enterDoors[id], () => {
         if (!this.isReady || this.opened || this.loading) return
         this.selected = id
         this.hooks.onEnter(id)
       })
     }
-    this.bay = this.intro.querySelector('.bay') as HTMLElement
-    this.srLive = this.intro.querySelector('.sr') as HTMLElement
-    activate(this.bay, () => {
-      if (!this.isReady || this.opened || this.loading) return
-      if (this.hooks.onCentralPerk) {
-        this.hooks.onCentralPerk()
-        return
-      }
-      window.clearTimeout(this.soonTimer)
-      this.bay.classList.add('soon')
-      this.srLive.textContent = 'Coming soon'
-      this.soonTimer = window.setTimeout(() => {
-        this.bay.classList.remove('soon')
-        this.srLive.textContent = ''
-      }, SOON_MS)
-    })
     document.body.appendChild(this.intro)
 
     this.pause = build(`
@@ -696,14 +673,14 @@ export class Ui {
   beginLoading(id:ApartmentId):void {
     this.loading=true
     this.selected=id
-    this.intro.classList.remove('loading19','loading20')
+    this.intro.classList.remove('loading19','loading20','loadingperk')
     this.intro.classList.add('loading',`loading${id}`)
     this.intro.setAttribute('aria-busy','true')
   }
 
   finishLoading():void {
     this.loading=false
-    this.intro.classList.remove('loading','loading19','loading20')
+    this.intro.classList.remove('loading','loading19','loading20','loadingperk')
     this.intro.removeAttribute('aria-busy')
     if(!this.opened&&this.intro.style.display!=='none')this.enterDoors[this.selected].focus({preventScroll:true})
   }
@@ -734,13 +711,10 @@ export class Ui {
     if (!this.entered) return
     this.hidePause()
     window.clearTimeout(this.hideTimer)
-    window.clearTimeout(this.soonTimer)
     this.opened = false
     this.loading = false
-    this.intro.classList.remove('open', 'loading', 'loading19', 'loading20')
+    this.intro.classList.remove('open', 'loading', 'loading19', 'loading20', 'loadingperk')
     this.intro.removeAttribute('aria-busy')
-    this.bay.classList.remove('soon')
-    this.srLive.textContent = ''
     this.intro.style.display = ''
     if (this.isReady) this.enterDoors[this.selected].focus({ preventScroll: true })
   }

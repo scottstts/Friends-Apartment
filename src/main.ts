@@ -204,8 +204,10 @@ async function boot():Promise<void> {
     scenePass.scene=apartment.world.scene
     if(!controls)controls=new PlayerControls(camera,apartment.world.colliders)
     else controls.setColliders(apartment.world.colliders)
+    controls.setGround(apartment.definition.groundHeight?.bind(apartment.definition))
     controls.spawn(...apartment.definition.spawn.position,...apartment.definition.spawn.lookAt)
-    const interactions=apartment.definition.interactions.seats.length?apartment.definition.interactions:undefined
+    const authored=apartment.definition.interactions.seats.length>0||(apartment.definition.interactions.couches?.length??0)>0
+    const interactions=authored?apartment.definition.interactions:undefined
     if(!seats){
       const {SeatingSystem:Seats}=await import('./player/seats')
       seats=new Seats(controls,camera,()=>{toHallway=true;document.exitPointerLock()},interactions)

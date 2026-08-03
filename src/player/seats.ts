@@ -14,7 +14,7 @@
  * rest exactly over each authored seating area. */
 import type * as THREE from 'three/webgpu'
 import * as L from '../lib/L'
-import type { ApartmentInteractions } from '../apartments/types'
+import type { ApartmentInteractions, CouchSpec } from '../apartments/types'
 import { EYE, applyPose, type PlayerControls } from './controls'
 import { SeatHint } from './hint'
 
@@ -56,8 +56,8 @@ interface SeatTarget {
   radius: number
   /** distance from a player position to this seat's approach zone */
   zoneDist(px: number, py: number): number
-  /** which spot an entry from y lands on (sofa: its two halves) */
-  entrySpot(py: number): number
+  /** which spot an entry lands on (sofa: its two halves) */
+  entrySpot(px: number, py: number): number
 }
 
 function chairTarget(
@@ -90,6 +90,44 @@ function chairTarget(
     radius,
     zoneDist: (px, py) => Math.hypot(px - ax, py - ay),
     entrySpot: () => 0,
+  }
+}
+
+/** An apartment-authored multi-spot couch, the apartment-20 choreography
+ * driven by CouchSpec numbers: spots ordered so KeyA slides towards the
+ * sitter's left, entry lands on the near end, the approach zone is a line
+ * held out in front and approaches from behind never engage. */
+function couchTarget(spec: CouchSpec): SeatTarget {
+  const fx = Math.cos(spec.facing)
+  const fy = Math.sin(spec.facing)
+  const lx = -fy
+  const ly = fx
+  const [cx, cy] = spec.center
+  const yaw = wrap(spec.facing - Math.PI / 2)
+  const spots: Spot[] = [-1, 0, 1].map((k, i) => ({
+    x: cx + fx * spec.forwardOffset + lx * spec.pitch * k,
+    y: cy + fy * spec.forwardOffset + ly * spec.pitch * k,
+    eyeZ: spec.eyeZ,
+    yaw,
+    standX: spec.stands[i][0],
+    standY: spec.stands[i][1],
+    fwdX: fx,
+    fwdY: fy,
+  }))
+  return {
+    kind: 'couch',
+    spots,
+    radius: spec.radius,
+    zoneDist: (px, py) => {
+      const rx = px - cx
+      const ry = py - cy
+      if (rx * fx + ry * fy < spec.behindMin) return Infinity
+      const t = Math.max(-spec.pitch, Math.min(spec.pitch, rx * lx + ry * ly))
+      const qx = cx + lx * t + fx * spec.frontDist
+      const qy = cy + ly * t + fy * spec.frontDist
+      return Math.hypot(px - qx, py - qy)
+    },
+    entrySpot: (px, py) => ((px - cx) * lx + (py - cy) * ly >= 0 ? 2 : 0),
   }
 }
 
@@ -131,7 +169,7 @@ function buildTargets(): SeatTarget[] {
       zoneDist: (px, py) =>
         // never from behind the back rail
         px < cx + 0.5 ? Infinity : Math.hypot(px - frontX, py - Math.max(y0, Math.min(y1, py))),
-      entrySpot: (py) => (py >= cy ? 2 : 0),
+      entrySpot: (_px, py) => (py >= cy ? 2 : 0),
     })
   }
 
@@ -174,7 +212,7 @@ function buildTargets(): SeatTarget[] {
 }
 
 function buildApartmentTargets(interactions: ApartmentInteractions): SeatTarget[] {
-  return interactions.seats.map((seat) =>
+  const chairs = interactions.seats.map((seat) =>
     chairTarget(
       'chair',
       seat.center[0],
@@ -187,6 +225,8 @@ function buildApartmentTargets(interactions: ApartmentInteractions): SeatTarget[
       seat.anchor,
     ),
   )
+  const couches = (interactions.couches ?? []).map(couchTarget)
+  return [...chairs, ...couches]
 }
 
 /** The approach zone just inside the closed front door (west wall, x = 0). */
@@ -247,9 +287,11 @@ export class SeatingSystem {
 
   /** Rebind seating and the exit-door proximity anchor when the selected
    * apartment changes. Apartment 20's empty seat list retains its established
-   * couch/chair/bed choreography; apartment 19 supplies its two recliners. */
+   * couch/chair/bed choreography; apartment 19 supplies its two recliners and
+   * Central Perk its hero couch and armchair. */
   configure(interactions?: ApartmentInteractions): void {
-    this.targets = interactions?.seats.length ? buildApartmentTargets(interactions) : buildTargets()
+    const authored = interactions && (interactions.seats.length > 0 || (interactions.couches?.length ?? 0) > 0)
+    this.targets = authored ? buildApartmentTargets(interactions) : buildTargets()
     this.doorPoint = interactions?.door.point ?? DOOR_XY
     this.doorRadius = interactions?.door.radius ?? DOOR_R
     this.controls.external = false
@@ -299,7 +341,7 @@ export class SeatingSystem {
     const p = this.controls.getPose()
     const tgt = this.nearest(p.x, p.y)
     if (!tgt) return
-    const idx = tgt.entrySpot(p.y)
+    const idx = tgt.entrySpot(p.x, p.y)
     this.controls.external = true
     this.controls.lookLocked = true
     const c = this.camera.position
@@ -470,7 +512,8 @@ export class SeatingSystem {
     const x = a.x + (b.x - a.x) * e + a.fwdX * 0.035 * lift + sw.dx
     const y = a.y + (b.y - a.y) * e + a.fwdY * 0.035 * lift + sw.dy
     const z = a.eyeZ + (b.eyeZ - a.eyeZ) * e + 0.065 * lift + sw.dz
-    const roll = -Math.sign(b.y - a.y) * 0.022 * lift // shoulders tip into the push
+    const leftward = (b.x - a.x) * -a.fwdY + (b.y - a.y) * a.fwdX
+    const roll = -Math.sign(leftward) * 0.022 * lift // shoulders tip into the push
     return { x, y, z, yaw, pitch, roll }
   }
 
