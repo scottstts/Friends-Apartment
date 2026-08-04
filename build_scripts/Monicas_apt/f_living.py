@@ -840,7 +840,12 @@ def glass_table(name, cx, cy, M, w=0.60, d=0.60, h=0.575, cname=C):
 
 # ------------------------------------------------------------------- credenza
 def credenza(name, M, cname=C):
-    x0, x1 = 8.00, L.EX - 0.03
+    # 0.63 deep, not 0.52.  The television is what sets this: at 0.52 the set
+    # was deeper than the cabinet it stands on, hung 110 mm out over the front
+    # edge, and still had its back 50 mm inside the Jouets poster on the wall
+    # behind.  Deepening the case and slimming the set gives the poster its own
+    # air and puts the television wholly on the top.
+    x0, x1 = 7.89, L.EX - 0.03
     y0, y1 = L.TV_C[1] - L.CRED_HW, L.TV_C[1] + L.CRED_HW
     h = 0.90
     d = x1 - x0
@@ -947,8 +952,14 @@ def crt_tv(name, cx, cy, cz, M, w=0.60, d=0.52, h=0.50, cname=C):
     # a microwave standing on the sideboard rather than a television.
     bez = mlib.panel_with_holes(name + "_bez", w - 0.04, h - 0.04, 0.030,
                                 [(0.048, 0.058, w - 0.088, h - 0.082)], cname)
-    bez.data.transform(Matrix(((0, 0, 1, -d / 2 - 0.028), (1, 0, 0, -w / 2 + 0.02),
-                               (0, 1, 0, 0.02), (0, 0, 0, 1))))
+    # panel_with_holes builds in the XZ plane with its thickness on Y, and this
+    # matrix had been feeding world X from the panel's height and world Z from
+    # its thickness - so the "bezel" was a 30 mm plate lying flat in the bottom
+    # of the case, 600 mm deep, with no frame round the tube at all.  It only
+    # went unnoticed because at 620 mm deep the case swallowed it whole; slim
+    # the set and it comes straight out through the back.
+    bez.data.transform(Matrix(((0, 1, 0, -d / 2 - 0.028), (1, 0, 0, -w / 2 + 0.02),
+                               (0, 0, 1, 0.02), (0, 0, 0, 1))))
     mlib.recalc_normals(bez)
     mlib.bevel(bez, 0.005, 2, 45)
     # the bezel was the same dark plastic as the cabinet, so it never read; on
@@ -1586,10 +1597,14 @@ def build():
     # Scaled up with the sideboard it stands on, and set towards its south end -
     # in the crop the set is right of centre, with the vase, the pair of bronze
     # figures and the fern filling the longer stretch to its left.
-    crt_tv("LR_tv", 8.23, L.TV_SET_Y, 0.90, M, w=0.80, d=0.62, h=0.64)
+    # 0.52 deep and drawn forward, so its back stands 46 mm clear of the
+    # poster's frame instead of 50 mm inside it, and its front lands 4 mm behind
+    # the cabinet's own front edge rather than overhanging it.
+    crt_tv("LR_tv", 8.184, L.TV_SET_Y, 0.90, M, w=0.80, d=0.52, h=0.64)
     # Tucked in beside the sideboard with its face on the same line, not standing
-    # 215 mm proud of it out into the room.  8.045 is the sideboard's front.
-    speaker("LR_speaker", 8.045 + 0.20, L.TV_C[1] - L.CRED_HW - 0.19, M)
+    # 215 mm proud of it out into the room - so it comes forward with the
+    # deepened case.  7.935 is the sideboard's front.
+    speaker("LR_speaker", 7.935 + 0.20, L.TV_C[1] - L.CRED_HW - 0.19, M)
     window_seat("LR_seat", M)
     console_table("LR_console", M)
     door_wall("LR_doorwall", M)
@@ -1660,7 +1675,7 @@ def build():
     # Standing ON the speaker, not on the floor beside it.  trailing_plant's z
     # is the pot's RIM, not its base, so the speaker's 0.66 top plus the pot's
     # own 0.124 height is what puts it down on the cabinet.
-    P.trailing_plant("LR_pothos", (8.245, L.TV_C[1] - L.CRED_HW - 0.19, 0.824),
+    P.trailing_plant("LR_pothos", (8.135, L.TV_C[1] - L.CRED_HW - 0.19, 0.824),
                      14, 6, C, M['leaf'], M['wicker'], 0.13)
     # Credenza-top dressing.  The set photo has one thing on this top beside the
     # television: a tall vase of yellow blooms at the far end.  The two little

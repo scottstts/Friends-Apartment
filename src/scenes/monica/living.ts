@@ -816,7 +816,8 @@ function glassTable(w: World, cx: number, cy: number, M: MatSet, cw = 0.6, d = 0
 
 // ------------------------------------------------------------------- credenza
 function credenza(w: World, M: MatSet): void {
-  const x0 = 8.0
+  // 0.63 deep, not 0.52, so the slimmed television stands wholly on the top
+  const x0 = 7.89
   const x1 = L.EX - 0.03
   const y0 = L.TV_C[1] - L.CRED_HW
   const y1 = L.TV_C[1] + L.CRED_HW
@@ -920,10 +921,13 @@ function crtTv(w: World, cx: number, cy: number, cz: number, M: MatSet, cw = 0.6
   mlib.bevel(body, 0.014, 3)
   placed.push([body, M.crt])
   const bez = mlib.panelWithHoles(cw - 0.04, h - 0.04, 0.03, [[0.048, 0.058, cw - 0.088, h - 0.082]])
+  // panelWithHoles builds in the XZ plane with thickness on Y; keep height on
+  // world Z and thickness on world X so the bezel stands upright framing the
+  // tube instead of lying flat in the bottom of the case
   mlib.transform4(bez, [
-    [0, 0, 1, -d / 2 - 0.028],
+    [0, 1, 0, -d / 2 - 0.028],
     [1, 0, 0, -cw / 2 + 0.02],
-    [0, 1, 0, 0.02],
+    [0, 0, 1, 0.02],
     [0, 0, 0, 1],
   ])
   mlib.recalcNormals(bez)
@@ -1510,8 +1514,10 @@ export function build(w: World): MatSet {
   glassTable(w, L.GLASS_T[0], L.GLASS_T[1], M)
   ceilingLight(w, L.CHANDELIER[0], L.CHANDELIER[1], M, 350.0, 0.3, 0.185, 5500.0)
   credenza(w, M)
-  crtTv(w, 8.23, L.TV_SET_Y, 0.9, M, 0.8, 0.62, 0.64)
-  speaker(w, 8.245, L.TV_C[1] - L.CRED_HW - 0.19, M)
+  // 0.52 deep and drawn forward: back clear of the poster frame, front just
+  // behind the deepened credenza's front edge
+  crtTv(w, 8.184, L.TV_SET_Y, 0.9, M, 0.8, 0.52, 0.64)
+  speaker(w, 7.935 + 0.2, L.TV_C[1] - L.CRED_HW - 0.19, M)
   windowSeat(w, M)
   consoleTable(w, M)
   doorWall(w, M)
@@ -1581,7 +1587,7 @@ export function build(w: World): MatSet {
   w.add(rod, mats.wood('wood_rod', ['5A3418', '3A1E0A', '221004'], { ring: 60, warp: 0.03, bump: 0.2, axis: 'YZ' }))
   // plants
   P.fern(w, [8.12, L.TV_C[1] + 1.02, 0.9 + 0.32 * 0.62], 0.32, 30, 3, true, M.leaf, M.terra)
-  P.trailingPlant(w, [8.245, L.TV_C[1] - L.CRED_HW - 0.19, 0.824], 14, 6, M.leaf, M.wicker, 0.13)
+  P.trailingPlant(w, [8.135, L.TV_C[1] - L.CRED_HW - 0.19, 0.824], 14, 6, M.leaf, M.wicker, 0.13)
   // two small bronze figures on the credenza top beside the vase
   const figs: [number, number, number][] = [
     [0.32, 0.155, 0.03],
