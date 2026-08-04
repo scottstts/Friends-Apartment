@@ -316,6 +316,12 @@ canvas { display: block; }
 @keyframes perkpulse { 0%, 100% { opacity: 0.8; } 40% { opacity: 1; } }
 
 /* ---- centre column (fatal page) ---- */
+/* The fatal page keeps the earlier purple door; the hallway pair stays green. */
+.fatal .door {
+  background:
+    linear-gradient(104deg, rgba(255,255,255,0) 40%, rgba(255,255,255,0.05) 49%, rgba(255,255,255,0.015) 55%, rgba(255,255,255,0) 64%),
+    radial-gradient(120% 118% at 50% 32%, #6f5a9e 0%, #5b4884 40%, #46356b 72%, #342853 100%);
+}
 .stack {
   position: relative; display: flex; flex-direction: column; align-items: center;
   text-align: center; gap: clamp(18px, 4.2vh, 44px); padding: 0 24px;
