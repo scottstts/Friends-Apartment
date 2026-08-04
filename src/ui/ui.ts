@@ -149,14 +149,32 @@ canvas { display: block; }
   left: calc(50% - var(--hw));
   width: calc(var(--depth) + var(--zf) - 60vh);
   transform-origin: 0 50%; transform: rotateY(90deg) translateX(calc(-1 * var(--zf)));
+}
+.wall.right {
+  left: calc(50% + var(--hw) - var(--depth) - var(--zf));
+  transform-origin: 100% 50%; transform: rotateY(-90deg) translateX(var(--zf));
+}
+/* The wall paint rides a backing layer with the doorway's footprint cut out
+ * (two mask layers, exclude-composited), so each opening is a true hole in
+ * the plaster: a dimming door fades over hallway darkness instead of
+ * revealing wainscot bands through itself.  The hole tucks 0.6vh inside the
+ * casing so the resting door always overlaps its edges. */
+.wall::before {
+  content: ''; position: absolute; inset: 0;
+  mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  mask-size: 100% 100%, calc(var(--dw) + var(--dh) * 0.06 - 1.2vh) calc(var(--dh) * 1.045 - 0.7vh);
+  mask-repeat: no-repeat;
+  mask-composite: exclude;
+}
+.wall.left::before {
+  mask-position: 0 0, left calc(var(--zf) + var(--dnear) - var(--dh) * 0.03 + 0.6vh) bottom 0.6vh;
   background:
     linear-gradient(to left, rgba(255,216,150,0.22) 0 0.8vh, rgba(255,216,150,0) 2vh),
     linear-gradient(to left, rgba(20,14,6,0) 0.8vh, rgba(20,14,6,0.38) 2.6vh, rgba(20,14,6,0) 9vh),
     linear-gradient(90deg, rgba(20,14,6,0.45), rgba(20,14,6,0.1) 45%, rgba(255,236,185,0.1) 100%),${WALL_BANDS};
 }
-.wall.right {
-  left: calc(50% + var(--hw) - var(--depth) - var(--zf));
-  transform-origin: 100% 50%; transform: rotateY(-90deg) translateX(var(--zf));
+.wall.right::before {
+  mask-position: 0 0, right calc(var(--zf) + var(--dnear) - var(--dh) * 0.03 + 0.6vh) bottom 0.6vh;
   background:
     linear-gradient(to right, rgba(20,14,6,0.4), rgba(20,14,6,0) 7vh),
     linear-gradient(270deg, rgba(20,14,6,0.45), rgba(20,14,6,0.1) 45%, rgba(255,236,185,0.1) 100%),${WALL_BANDS};
@@ -169,6 +187,10 @@ canvas { display: block; }
   left: calc(50% - var(--hw) - 60vh); width: calc(2 * var(--hw) + 61vh);
   top: calc(var(--hz) + var(--fdrop)); height: calc(var(--depth) + var(--zf));
   transform-origin: 50% 0; transform: rotateX(-90deg) translateY(calc(-1 * var(--zf)));
+  /* The leftward overhang exists only for the branch corridor, so it is
+   * clipped back to the far 60vh seen through the turn; the stretch hidden
+   * behind the left wall would otherwise show through the doorway hole. */
+  clip-path: polygon(60vh 0, 100% 0, 100% 100%, 0 100%, 0 calc(100% - 60vh), 60vh calc(100% - 60vh));
   background:
     radial-gradient(90vh 55vh at 60vh calc(100% - 25vh), rgba(255,208,125,0.2), rgba(255,208,125,0.05) 45%, rgba(255,208,125,0) 70%),
     radial-gradient(60vh 40vh at 40% 55%, rgba(40,36,30,0.25), rgba(40,36,30,0) 70%),
@@ -181,6 +203,9 @@ canvas { display: block; }
   left: calc(50% - var(--hw) - 60vh); width: calc(2 * var(--hw) + 61vh);
   top: calc(var(--hz) - var(--crise) - var(--depth) - var(--zf)); height: calc(var(--depth) + var(--zf));
   transform-origin: 50% 100%; transform: rotateX(90deg) translateY(var(--zf));
+  /* Same trim as the floor: this plane hangs bottom-up, so its far branch
+   * strip is y 0-60vh and the wall-hidden overhang is clipped away. */
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 60vh 100%, 60vh 60vh, 0 60vh);
   background: linear-gradient(0deg, #191307, #40331a);
 }
 /* The far wall continues 60vh leftward past the corridor - the stretch seen

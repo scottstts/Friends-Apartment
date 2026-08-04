@@ -110,13 +110,29 @@ async function boot():Promise<void> {
 
   const clock=new THREE.Clock(false)
   const stopRendering=():void=>{if(!rendering)return;renderer.setAnimationLoop(null);clock.stop();rendering=false}
+  // Every apartment is a still life - no time-driven node, animated texture or
+  // runtime shadow update - so a frame can only differ when the camera pose
+  // changed (walking, look, bob, seat choreography, seated breathing) or an
+  // invalidation (resize, activation) demands one. The loop keeps simulating
+  // every tick but presents nothing while the image would be identical.
+  let needsRender=true
+  const renderedPosition=new THREE.Vector3()
+  const renderedQuaternion=new THREE.Quaternion()
+  const POSE_EPS_POS=1e-10 // squared metres: 0.01 mm, far under a visible parallax step
+  const POSE_EPS_ROT=1e-10 // 1-|q dot|: ~3e-5 rad, far under a pixel of pan
   const renderFrame=():void=>{
     const dt=clock.getDelta()
     if(controls?.enabled)controls.update(dt)
     seats?.update(dt)
+    const moved=camera.position.distanceToSquared(renderedPosition)>POSE_EPS_POS
+      ||1-Math.abs(camera.quaternion.dot(renderedQuaternion))>POSE_EPS_ROT
+    if(!needsRender&&!moved)return
+    needsRender=false
+    renderedPosition.copy(camera.position)
+    renderedQuaternion.copy(camera.quaternion)
     postProcessing.render()
   }
-  const startRendering=():void=>{if(rendering)return;rendering=true;clock.start();renderer.setAnimationLoop(renderFrame)}
+  const startRendering=():void=>{if(rendering)return;rendering=true;needsRender=true;clock.start();renderer.setAnimationLoop(renderFrame)}
 
   const poseForBuild=(definition:ApartmentDefinition):void=>{
     const [x,y]=definition.spawn.position
@@ -214,6 +230,7 @@ async function boot():Promise<void> {
     }else seats.configure(interactions)
     active=apartment
     controls.enabled=document.pointerLockElement===renderer.domElement
+    needsRender=true
   }
 
   const tryEnter=():void=>{
@@ -258,6 +275,7 @@ async function boot():Promise<void> {
   window.addEventListener('resize',()=>{
     setSize();camera.aspect=innerWidth/innerHeight
     camera.updateProjectionMatrix()
+    needsRender=true
   })
 
   document.addEventListener('pointerlockchange',()=>{
