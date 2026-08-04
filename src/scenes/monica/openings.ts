@@ -2,7 +2,7 @@
 import type * as THREE from 'three/webgpu'
 import * as L from './L'
 import * as mlib from '../../lib/mlib'
-import { MeshData } from '../../lib/mesh'
+import { MeshData, type Vec2, type Vec3 } from '../../lib/mesh'
 import * as mats from '../../mats/mats'
 import * as O from './sopenings'
 import type { MatSet } from './shell'
@@ -83,6 +83,479 @@ export function mkMats(): MatSet {
   return M
 }
 
+/** Radius of the superellipse |x/a|^n + |z/b|^n = 1 along a ray. */
+function supR(th: number, a: number, b: number, n: number): number {
+  const c = Math.cos(th)
+  const s = Math.sin(th)
+  return (Math.abs(c / a) ** n + Math.abs(s / b) ** n) ** (-1.0 / n)
+}
+
+// ---- the peephole surround, measured off ref_images/decoration.png ------
+// Everything here is in REFERENCE PIXELS of that image with the origin at the
+// centre of the opening, +X right, +Z up: outer 341 x 361, opening 188 x 223.
+const PF_AW = 96.0 // opening half-width / half-height
+const PF_AH = 114.0
+const PF_APN = 7.0 // opening is a superellipse: straight sides
+const PF_CMAX = 0.5 ** (1.0 / PF_APN) // ...so this is |x|/AW on its diagonal
+// How far the moulding stands out from the opening, round the loop: widest at
+// the middle of each side, cut back towards the diagonals where the curls
+// take the outline over.  Cutting on min(|x|/AW, |z|/AH) rather than on the
+// polar angle keeps the sides' bulge broad and flat the way the reference's
+// is, and it has to bite hard enough that the rail's outer edge actually
+// falls away towards a corner - a gentler taper leaves the outline widening
+// all the way in and the whole thing comes out a circle.  40 at 1.7 holds
+// each side flat and then pinches, which squares the outline off and opens
+// the notch in front of each curl.
+const PF_BW_TB = 69.5 // 69.5 top and bottom, 74 at the sides
+const PF_BW_EX = 4.5
+const PF_BW_CUT = 38.0
+const PF_BW_CP = 1.7
+// min() of the two has a kink exactly on the diagonal, and since the whole
+// section is scaled by the rail's width that kink draws a dead-straight
+// crease diagonally across each corner.  Round the min off over this much.
+const PF_BW_SM = 0.3
+// The rail's section, in fractions of its width.  It is ONE solid band with
+// a flat top, a crown over each of its three lobes, and narrow grooves cut
+// into it - not three rolls laid side by side: built up out of rolls the
+// rail comes out as thin separate arcs with bare bed showing between them.
+// Three grooves, four lobes - the reference's middle crease is the shallow
+// one.  The crowns are deliberately slight next to the grooves' depth: the
+// rail has to read as a flat drapery creased by fold lines, not a row of
+// tubes with the silhouette rolling over far too softly.
+const PF_BAND_H = 14.5 // height, and how flat the top is
+const PF_BAND_P = 8.0
+// The folds are not evenly spaced: they bunch towards the outer edge, so the
+// lobe against the opening is the broad one and they narrow outwards.
+// Spacing them evenly reads as knitting rather than gathered drapery.
+const PF_LOBES: [number, number, number][] = [
+  [0.15, 0.15, 2.0],
+  [0.43, 0.13, 2.2],
+  [0.66, 0.1, 2.2],
+  [0.885, 0.115, 2.0],
+]
+const PF_GROOVES: [number, number, number][] = [
+  [0.3, 0.055, 7.0],
+  [0.565, 0.05, 6.0],
+  [0.76, 0.05, 6.5],
+]
+const PF_GROOVE_P = 0.7 // narrow and steep-sided, not a dish
+const PF_BLEND = 2.0 // px the curls run into the rails over
+// Keep that small.  Widened, the rounding piles up where the rail and BOTH
+// curls of a corner are all in play at once and raises a flat wedge there.
+// The eight curls.  Every one is the same size, and the two on a corner are
+// each other reflected in that corner's axis, so a corner reads symmetrically
+// however the frame's own proportions fall.  The axis is a degree or two off
+// the true diagonal because the frame is taller than it is wide: that is
+// what lands the pair's reach on 0.945, the outer proportion the reference
+// has.  They stand a little proud of the rails at both extremes, so each
+// corner reads as its own bump.  Same idea as the rail: a solid domed lobe
+// with a spiral groove cut across it, which leaves the rolled ribbon between
+// the wraps standing - a raised spiral instead just reads as wire on a blob.
+const PF_VOL_AXIS = 132.7 // deg, the top-left corner's axis
+const PF_VOL_MID = 186.0 // the pair's centre, out along that axis
+const PF_VOL_SEP = 23.0 // and half their step across it
+const PF_VOL_R = 32.0
+const PF_VOL_END = -10.0 // where the rail runs into the curl
+//                        turns  r0   rmax  gw   GD   CR   HB    re   Ae
+const PF_VOL_CUT = [1.25, 4.0, 26.0, 4.2, 8.0, 3.5, 16.0, 6.5, 4.5] as const
+
+/** The gold rococo surround round the peephole on Monica's door.
+ *
+ * Built the way the prop is actually made - as ONE moulded piece.  It is not
+ * an assembly of tubes: on the reference each side and the two curls at its
+ * ends are a single continuous mass, and the ridges running along it are
+ * creases in that mass, not gaps between separate rods.
+ *
+ * So the shape is described as a relief - a height above the door face - and
+ * then meshed in one go as a single quad ring:
+ *
+ *   - round the opening, a solid band with a flat top and a rolled edge at
+ *     either side, crowned over three lobes and cut with two grooves.  It is
+ *     widest at the middle of each side and pinched towards the corners,
+ *     which both bulges the outline between the corners and squares it off.
+ *   - at each corner a pair of volutes, one ending each rail: a domed lobe
+ *     with an Archimedean spiral groove cut across it and a boss in its eye,
+ *     so what stands proud is the rolled ribbon between the wraps.
+ *
+ * The mass is the upper envelope of all of that, so nothing is a seam.
+ * Built in XZ with +Y out of the door, matching what place() expects.
+ * w x h is the outer size. */
+function peepholeFrame(w: number, h: number): MeshData {
+  const TAU = Math.PI * 2
+  const pmod = (x: number, m: number): number => ((x % m) + m) % m
+
+  const bandW = (th: number): number => {
+    const r = supR(th, PF_AW, PF_AH, PF_APN)
+    const u = Math.abs(r * Math.cos(th)) / PF_AW
+    const v = Math.abs(r * Math.sin(th)) / PF_AH
+    const e = Math.max(0.0, 1.0 - Math.abs(u - v) / PF_BW_SM)
+    const c = (Math.min(u, v) - 0.25 * PF_BW_SM * e * e) / PF_CMAX
+    return PF_BW_TB + PF_BW_EX * Math.cos(th) ** 2 - PF_BW_CUT * Math.max(c, 0.0) ** PF_BW_CP
+  }
+
+  /** The moulding, measured out from the opening along the ray.  Radial
+   * rather than normal to the opening: on a superellipse this near a
+   * rectangle the two differ by under a degree, and doing it the other way
+   * costs a search per sample. */
+  const railH = (r: number, th: number): number => {
+    const bw = bandW(th)
+    const t = (r - supR(th, PF_AW, PF_AH, PF_APN)) / bw
+    if (t <= 0.0 || t >= 1.0) return 0.0
+    const k = bw / 71.0 // the section thins with the rail
+    let y = PF_BAND_H * Math.sqrt(1.0 - (2.0 * t - 1.0) ** PF_BAND_P)
+    for (const [c, hw, amp] of PF_LOBES) {
+      const q = (t - c) / hw
+      if (q > -1.0 && q < 1.0) y += amp * Math.sqrt(1.0 - q * q)
+    }
+    for (const [c, hw, d] of PF_GROOVES) {
+      const q = (t - c) / hw
+      if (q > -1.0 && q < 1.0) y -= d * (1.0 - q * q) ** PF_GROOVE_P
+    }
+    return Math.max(y, 0.0) * k
+  }
+
+  // the curls: one pair built on the top-left corner's axis, then mirrored
+  // out to the other three.  Reflecting a spiral turns it over, so the
+  // handedness and the start angle travel with it - which is also how the
+  // second curl of each pair is made from the first.
+  const ax = rad(PF_VOL_AXIS)
+  const ux = Math.cos(ax)
+  const uz = Math.sin(ax)
+  const qx = Math.sin(ax)
+  const qz = -Math.cos(ax)
+  const [turns, r0, rmax, gw, GD, CR, HB, re, Ae] = PF_VOL_CUT
+  const K = (rmax - r0) / turns
+  const U = TAU * turns
+  const R = PF_VOL_R
+  const vols: [number, number, number, number][] = []
+  for (const sgn of [1.0, -1.0]) {
+    const ex = PF_VOL_MID * ux + sgn * PF_VOL_SEP * qx
+    const ez = PF_VOL_MID * uz + sgn * PF_VOL_SEP * qz
+    let te = rad(PF_VOL_END)
+    let hand = 1.0
+    if (sgn < 0.0) {
+      // the side rail's curl, mirrored
+      te = 2.0 * ax - te
+      hand = -hand
+    }
+    for (const sx of [-1.0, 1.0]) {
+      for (const sz of [-1.0, 1.0]) {
+        let t = te
+        let hd = hand
+        if (sx > 0.0) {
+          // mirrored in X off the top-left
+          t = Math.PI - t
+          hd = -hd
+        }
+        if (sz < 0.0) {
+          // ...and in Z
+          t = -t
+          hd = -hd
+        }
+        vols.push([sx * Math.abs(ex), sz * Math.abs(ez), t - hd * U, hd])
+      }
+    }
+  }
+
+  const volH = (x: number, z: number, V: [number, number, number, number]): number => {
+    const [ex, ez, th0, hd] = V
+    const dx = x - ex
+    const dz = z - ez
+    const d2 = dx * dx + dz * dz
+    if (d2 >= R * R) return 0.0
+    const d = Math.sqrt(d2)
+    let y = HB * Math.sqrt(1.0 - (d / R) ** 3)
+    // Where this point sits on the spiral: g counts wraps out from the eye,
+    // so it lands on a whole number exactly on a groove and halfway between
+    // two of them at the middle of a ribbon.  Working in that coordinate
+    // crowns the ribbon as well as cutting the groove, which is what makes a
+    // curl read as coiled rope instead of a flat disc with a scratch in it.
+    // psi's wrap shifts g by exactly one turn, so its fraction - all the
+    // section depends on - runs on through.
+    const psi = pmod(hd * (Math.atan2(dz, dx) - th0), TAU)
+    const g = (d - r0) / K - psi / TAU
+    let f = Math.min((g + 0.3) / 0.4, (turns + 0.3 - g) / 0.4) // fade at the ends
+    if (f > 0.0) {
+      f = Math.min(f, 1.0)
+      const fr = g - Math.floor(g)
+      y += f * CR * Math.sin(Math.PI * fr) ** 1.4
+      const dd = Math.min(fr, 1.0 - fr) * K
+      if (dd < gw) y -= f * GD * (1.0 - (dd / gw) ** 2) ** PF_GROOVE_P
+    }
+    if (d < re) y += Ae * Math.sqrt(1.0 - (d / re) ** 2) // the boss in the eye
+    return Math.max(y, 0.0)
+  }
+
+  const field = (x: number, z: number): number => {
+    const r = Math.hypot(x, z)
+    let y = r > 1e-6 ? railH(r, Math.atan2(z, x)) : 0.0
+    for (const V of vols) {
+      const v = volH(x, z, V)
+      // A rounded max, not a plain one: taken flat it leaves a hard crease
+      // everywhere a curl crosses its rail, and on the reference the two run
+      // into one another.  The grooves are cut by subtraction rather than by
+      // this, so rounding here softens the joins without touching them.
+      // The rounding width has to fall away with the smaller of the two, or
+      // it adds height out where BOTH are zero and the whole silhouette
+      // inflates into a disc.
+      const k = Math.min(PF_BLEND, v, y)
+      const d = k > 0.0 ? k - Math.abs(v - y) : 0.0
+      y = Math.max(v, y) + (d > 0.0 ? (d * d) / (4.0 * k) : 0.0)
+    }
+    return y
+  }
+
+  // ---- mesh it as one ring ------------------------------------------
+  // For each ray out of the centre, find where the mass ends, then lay a row
+  // of samples from the opening out to there.  The relief is zero at both,
+  // so the ring closes onto the door of its own accord.
+  const NU = 864
+  const NV = 48
+  const EPS = 0.05
+  const cols: [number, number, number, number][] = []
+  for (let i = 0; i < NU; i++) {
+    const th = (TAU * i) / NU
+    const ct = Math.cos(th)
+    const st = Math.sin(th)
+    const rIn = supR(th, PF_AW, PF_AH, PF_APN)
+    const step = 2.0
+    let lo = rIn
+    let r = rIn + 2.0
+    while (r < 240.0) {
+      // last radius still carrying mass
+      if (field(r * ct, r * st) > EPS) lo = r
+      r += step
+    }
+    let hi = lo + step
+    for (let b = 0; b < 20; b++) {
+      // then close on the edge
+      const m = 0.5 * (lo + hi)
+      if (field(m * ct, m * st) > EPS) lo = m
+      else hi = m
+    }
+    cols.push([ct, st, rIn, lo])
+  }
+  // Smooth the outline before laying rows on it.  Every row runs radially
+  // from the opening out to this boundary, so wherever the boundary steps -
+  // and it steps by 40-odd px where a curl's arc gives way to the rail's
+  // edge - neighbouring rows are stretched by very different amounts and the
+  // shear between them shows as a straight crease running inwards.
+  // Spreading the step over a handful of columns takes that out; it costs a
+  // little of the notch in front of each curl, which is worth it.
+  let outs = cols.map((c) => c[3])
+  for (let p = 0; p < 3; p++) {
+    const prev = outs
+    outs = prev.map(
+      (_, i) =>
+        0.0625 * prev[(i - 2 + NU) % NU] +
+        0.25 * prev[(i - 1 + NU) % NU] +
+        0.375 * prev[i] +
+        0.25 * prev[(i + 1) % NU] +
+        0.0625 * prev[(i + 2) % NU],
+    )
+  }
+
+  const grid: [number, number, number][][] = []
+  for (let i = 0; i < NU; i++) {
+    const [ct, st, rIn] = cols[i]
+    const rOut = outs[i]
+    const col: [number, number, number][] = []
+    for (let j = 0; j <= NV; j++) {
+      const r = rIn + ((rOut - rIn) * j) / NV
+      const x = r * ct
+      const z = r * st
+      col.push([x, z, field(x, z)])
+    }
+    col[0][2] = 0.0
+    col[NV][2] = 0.0
+    grid.push(col)
+  }
+  // take the edge off - a straight envelope is a shade too crisp for
+  // something cast in a mould and then painted.
+  const relief = grid.map((col) => col.map((c) => c[2]))
+  for (let i = 0; i < NU; i++) {
+    const a = grid[(i - 1 + NU) % NU]
+    const b = grid[(i + 1) % NU]
+    for (let j = 1; j < NV; j++) {
+      relief[i][j] = 0.72 * grid[i][j][2] + 0.07 * (a[j][2] + b[j][2]) + 0.07 * (grid[i][j - 1][2] + grid[i][j + 1][2])
+    }
+  }
+  for (let i = 0; i < NU; i++) for (let j = 1; j < NV; j++) grid[i][j][2] = relief[i][j]
+
+  // Scale off what actually got built rather than off a nominal outer size:
+  // the curls set the silhouette, and they move whenever their placement is
+  // touched.
+  let ox = 0.0
+  let oz = 0.0
+  for (const col of grid) {
+    for (const c of col) {
+      ox = Math.max(ox, Math.abs(c[0]))
+      oz = Math.max(oz, Math.abs(c[1]))
+    }
+  }
+  const SX = (0.5 * w) / ox
+  const SZ = (0.5 * h) / oz
+  const SY = 0.5 * (SX + SZ)
+  const verts: Vec3[] = []
+  const faces: number[][] = []
+  for (const col of grid) for (const [x, z, y] of col) verts.push([x * SX, y * SY, z * SZ])
+  const W = NV + 1
+  for (let i = 0; i < NU; i++) {
+    const i2 = (i + 1) % NU
+    for (let j = 0; j < NV; j++) faces.push([i * W + j, i2 * W + j, i2 * W + j + 1, i * W + j + 1])
+    // the back, flat on the door and never seen
+    faces.push([i2 * W, i * W, i * W + NV, i2 * W + NV])
+  }
+  const ob = MeshData.from(verts, faces)
+  mlib.recalcNormals(ob)
+  // 70, not the usual 32: the grooves' flanks are steeper than that and get
+  // marked sharp, which draws a hard line down the middle of every crease.
+  // Only the silhouette, where the relief meets its own back at a right
+  // angle, should stay sharp.
+  mlib.smoothShade(ob, 70)
+  return ob
+}
+
+/** A back plate lying flat on a face: outline in (x, z), standing off in Y. */
+function lockPlate(pw: number, ph: number, r: number, y0: number, y1: number, seg = 4): MeshData {
+  return mlib.prismXZ(mlib.roundedRect(pw, ph, r, seg), y0, y1)
+}
+
+/** Anything turned - a knob, a collar, a screw head - with its axis out of
+ * the face it is mounted on. */
+function lockTurn(prof: Vec2[], at: Vec3, seg = 20): MeshData {
+  const ob = mlib.revolve(prof, seg)
+  mlib.rotX(ob, -Math.PI / 2)
+  mlib.translate(ob, at)
+  return ob
+}
+
+/** A barrel bolt lying across the stile: back plate, two guide straps, the
+ * bolt running through them towards the door edge, and a thumb tab on it.
+ * The old one was a bare rounded slab with no bolt on it at all. */
+function surfaceBolt(mat: THREE.Material): [MeshData, THREE.Material][] {
+  const P: MeshData[] = [lockPlate(0.1, 0.032, 0.007, 0.0, 0.005)]
+  for (const gx of [-0.03, 0.024]) {
+    // the two guide straps
+    const g = lockPlate(0.013, 0.026, 0.004, 0.005, 0.0165, 2)
+    mlib.translate(g, [gx, 0.0, 0.0])
+    P.push(g)
+  }
+  // the bolt, shot to within a few mm of the leaf's edge
+  P.push(
+    mlib.tubeAlong(
+      [
+        [-0.064, 0.0107, 0.0],
+        [0.036, 0.0107, 0.0],
+      ],
+      mlib.circle(0.0055, 14),
+      { up: [0, 0, 1] },
+    ),
+  )
+  // a flat lug to throw it by - a turned knob here reads as a third lock
+  P.push(lockPlate(0.011, 0.019, 0.005, 0.015, 0.0194, 3))
+  const screw: Vec2[] = [
+    [0.0, 0.0],
+    [0.003, 0.0],
+    [0.003, 0.0012],
+    [0.0017, 0.0021],
+    [0.0, 0.0023],
+  ]
+  for (const [sx, sz] of [
+    [-0.043, 0.0],
+    [0.043, 0.0],
+  ] as [number, number][]) {
+    P.push(lockTurn(screw, [sx, 0.005, sz], 10))
+  }
+  const ob = mlib.join(P)
+  mlib.smoothShade(ob, 34)
+  return [[ob, mat]]
+}
+
+/** The door half of a security chain: the track its ball-end runs in, with
+ * the round pocket at the open end that the ball drops into. */
+function chainSlide(mat: THREE.Material, dark: THREE.Material): [MeshData, THREE.Material][] {
+  const P: MeshData[] = [lockPlate(0.086, 0.024, 0.011, 0.0, 0.0048)]
+  const screw: Vec2[] = [
+    [0.0, 0.0],
+    [0.0028, 0.0],
+    [0.0028, 0.0011],
+    [0.0016, 0.002],
+    [0.0, 0.0022],
+  ]
+  for (const sx of [-0.036, 0.036]) P.push(lockTurn(screw, [sx, 0.0048, 0.0], 10))
+  const ob = mlib.join(P)
+  mlib.smoothShade(ob, 34)
+  // the slot, and the pocket at the door-edge end of it
+  const sl = mlib.prismXZ(mlib.roundedRect(0.05, 0.008, 0.004, 3), 0.0, 0.0052)
+  mlib.translate(sl, [0.008, 0.0, 0.0])
+  const pk = mlib.prismXZ(mlib.circle(0.0072, 14), 0.0, 0.0052)
+  mlib.translate(pk, [-0.02, 0.0, 0.0])
+  const slot = mlib.join([sl, pk])
+  return [
+    [ob, mat],
+    [slot, dark],
+  ]
+}
+
+/** One link, lying in a plane that contains the vertical so it hangs, and
+ * turned across its neighbours the way a chain actually runs. */
+function chainLink(c: Vec3, R: number, r: number, across: boolean): MeshData {
+  const angles = Array.from({ length: 12 }, (_, k) => (Math.PI * 2 * k) / 12)
+  let path: Vec3[]
+  let up: Vec3
+  if (across) {
+    path = angles.map((t) => [c[0], c[1] + R * Math.cos(t), c[2] + R * Math.sin(t)] as Vec3)
+    up = [1.0, 0.0, 0.0]
+  } else {
+    path = angles.map((t) => [c[0] + R * Math.cos(t), c[1], c[2] + R * Math.sin(t)] as Vec3)
+    up = [0.0, 1.0, 0.0]
+  }
+  return mlib.tubeAlong(path, mlib.circle(r, 6), { closePath: true, up })
+}
+
+/** The jamb half: the anchor plate, and the chain hanging slack off it with
+ * its ball-end swinging free - the door is shut but not chained, which is
+ * how the set photo has it.  The old chain was one smooth bent tube. */
+function chainAnchor(mat: THREE.Material, links = 12): [MeshData, THREE.Material][] {
+  const P: MeshData[] = [lockPlate(0.026, 0.052, 0.007, 0.0, 0.005, 3)]
+  const screw: Vec2[] = [
+    [0.0, 0.0],
+    [0.0028, 0.0],
+    [0.0028, 0.0011],
+    [0.0016, 0.002],
+    [0.0, 0.0022],
+  ]
+  for (const sz of [-0.018, 0.018]) P.push(lockTurn(screw, [0.0, 0.005, sz], 10))
+  const R = 0.0062
+  const r = 0.0017
+  const pitch = 0.0088
+  const x0 = 0.0
+  const y0 = 0.0088
+  const z0 = -0.022
+  for (let k = 0; k < links; k++) {
+    const t = k / (links - 1)
+    P.push(chainLink([x0, y0 + 0.006 * t, z0 - pitch * k], R, r, k % 2 === 1))
+  }
+  // the ball on the free end that runs in the track
+  const bl = mlib.revolve(
+    [
+      [0.0, -0.0072],
+      [0.0042, -0.006],
+      [0.0058, -0.0022],
+      [0.0058, 0.0022],
+      [0.0042, 0.006],
+      [0.0, 0.0072],
+    ],
+    12,
+  )
+  mlib.translate(bl, [x0, y0 + 0.006, z0 - pitch * (links - 0.6)])
+  P.push(bl)
+  const ob = mlib.join(P)
+  mlib.smoothShade(ob, 40)
+  return [[ob, mat]]
+}
+
 export function build(w: World, M?: MatSet): MatSet {
   M = M ?? mkMats()
 
@@ -91,7 +564,8 @@ export function build(w: World, M?: MatSet): MatSet {
     const width = L.FD_Y[1] - L.FD_Y[0]
     const top = L.FD_TOP
     const cy = (L.FD_Y[0] + L.FD_Y[1]) * 0.5
-    const ln = O.lining(width, top, L.TW, 0.024)
+    const jambT = 0.024
+    const ln = O.lining(width, top, L.TW, jambT)
     O.place(ln, [0.0, cy, 0.0], [0, 1], [-1, 0])
     w.add(ln, M.trim)
     const cs = O.casing(width, top, 0.1, 0.026)
@@ -101,10 +575,17 @@ export function build(w: World, M?: MatSet): MatSet {
     O.place(cs2, [-L.TW, cy, 0.0], [0, 1], [-1, 0])
     w.add(cs2, M.trim)
     // transom: head rail + sash
-    const hr = mlib.box(-width / 2, 0.0, L.FD_H, width / 2, L.TW, L.FD_H + 0.075)
+    // ...between the linings, not across the whole rough opening: full width
+    // it sits inside both jambs and the shared faces flicker at the two top
+    // corners.  The transom above already sizes itself this way.
+    const hw = width / 2 - jambT
+    const hr = mlib.box(-hw, 0.0, L.FD_H, hw, L.TW, L.FD_H + 0.075)
     O.place(hr, [0.0, cy, 0.0], [0, 1], [-1, 0])
     w.add(hr, M.trim)
-    const [tf, tg] = O.steelWindow(width - 0.048, top - L.FD_H - 0.085, [1], 1, {
+    // ...and clear of the head lining as well as the jambs.  Run to the full
+    // height of the rough opening its top rail sits inside the lining's head,
+    // and the shared faces flicker in a stripe right across the transom.
+    const [tf, tg] = O.steelWindow(width - 2 * jambT, top - jambT - L.FD_H - 0.085, [1], 1, {
       frameW: 0.048,
       frameD: 0.055,
       colsPerBay: 1,
@@ -127,24 +608,16 @@ export function build(w: World, M?: MatSet): MatSet {
     w.add(leaf, M.door_purple)
     // the yellow frame + peephole boss + hardware (all on the leaf face)
     const fx = -0.075
-    const FW = 0.3
-    const FH = 0.34
-    const prof: [number, number][] = [
-      [0.0, 0.0015],
-      [0.0, 0.017],
-      [0.006, 0.0225],
-      [0.0155, 0.025],
-      [0.0245, 0.0215],
-      [0.03, 0.013],
-      [0.0325, 0.006],
-      [0.034, 0.0025],
-      [0.034, 0.0015],
-    ]
-    const fr = mlib.sweepRectFrame(FW, FH, prof)
-    mlib.smoothShade(fr, 34)
+    // The gold frame is the one thing everyone knows about this door, and a
+    // mitred rectangle is not it.  The prop is a moulded rococo surround with
+    // a pair of volutes on every corner and a reeded rail between them; see
+    // peepholeFrame.  300 x 318 is the reference's own outer proportion.
+    const fr = peepholeFrame(0.3, 0.3178)
     O.place(fr, [fx, cy, 1.545], [0, 1], [1, 0])
     w.add(fr, M.gold)
-    // spyhole above the frame
+    // ...and the spyhole belongs in the middle of it.  It was moved out above
+    // the frame back when the frame was a plain rectangle with nothing to say
+    // about where it sat; the frame is hung *around* the spyhole on the set.
     const ph = mlib.revolve(
       [
         [0.0, 0.0],
@@ -156,7 +629,7 @@ export function build(w: World, M?: MatSet): MatSet {
       16,
     )
     mlib.rotX(ph, -Math.PI / 2)
-    O.place(ph, [fx, cy, 1.79], [0, 1], [1, 0])
+    O.place(ph, [fx, cy, 1.545], [0, 1], [1, 0])
     w.add(ph, M.brass)
     // knocker: back-plate and ring
     const kp = mlib.revolve(
@@ -189,45 +662,28 @@ export function build(w: World, M?: MatSet): MatSet {
     const kn = O.knobSet()
     O.place(kn, [fx, L.FD_Y[0] + 0.11, 1.0], [0, 1], [1, 0])
     w.add(kn, M.brass)
-    // the stack of locks up the latch stile
-    for (const [zz, rr2] of [
-      [1.415, 0.026],
-      [1.135, 0.022],
-    ] as [number, number][]) {
-      const db = mlib.revolve(
-        [
-          [0.0, 0.0],
-          [rr2 * 1.35, 0.0],
-          [rr2 * 1.35, 0.008],
-          [rr2, 0.014],
-          [rr2, 0.03],
-          [rr2 * 0.45, 0.036],
-          [0.0, 0.038],
-        ],
-        18,
-      )
-      mlib.rotX(db, -Math.PI / 2)
-      mlib.smoothShade(db, 40)
-      O.place(db, [fx, L.FD_Y[0] + 0.105, zz], [0, 1], [1, 0])
-      w.add(db, M.brass)
+    // Three fittings up the latch stile and no more, top to bottom: the
+    // security chain, the bolt, and the knob - which is exactly what the set
+    // photo has.  Only ONE of them is a knob you turn; every escutcheon added
+    // beyond these just puts another brass disc on the stile.
+    const ly = L.FD_Y[0]
+    for (const [ob, mm] of chainSlide(M.chrome, M.steel_dk)) {
+      O.place(ob, [fx, ly + 0.08, 1.585], [0, 1], [1, 0])
+      w.add(ob, mm)
     }
-    const sb = mlib.prism(mlib.roundedRect(0.115, 0.048, 0.008, 3), 0.0, 0.009)
-    mlib.rotX(sb, -Math.PI / 2)
-    O.place(sb, [fx, L.FD_Y[0] + 0.095, 1.265], [0, 1], [1, 0])
-    w.add(sb, M.brass)
-    const cpl = mlib.prism(mlib.roundedRect(0.03, 0.075, 0.008, 3), 0.0, 0.007)
-    mlib.rotX(cpl, -Math.PI / 2)
-    O.place(cpl, [fx, L.FD_Y[0] + 0.085, 1.585], [0, 1], [1, 0])
-    w.add(cpl, M.brass)
-    const slack: [number, number, number][] = [[0.0, 0.0, 0.0]]
-    for (let k = 1; k < 9; k++) {
-      const t = k / 8.0
-      slack.push([-0.012 - 0.01 * Math.sin(t * Math.PI), 0.105 * t, -0.055 * Math.sin(t * Math.PI) - 0.004 * t])
+    // ...the chain itself hangs off the reveal, not off the leaf: a chain
+    // with both ends on the door is the thing that made this stack read as
+    // nonsense.  On the lining's face, not on the rough opening - the reveal
+    // is lined, so the jamb you can actually screw into is a jambT in.  Hung
+    // off ly it ends up buried inside the lining and invisible.
+    for (const [ob, mm] of chainAnchor(M.chrome)) {
+      O.place(ob, [-0.045, ly + jambT, 1.585], [1, 0], [0, 1])
+      w.add(ob, mm)
     }
-    const chn = mlib.tubeAlong(slack, mlib.circle(0.0035, 6))
-    mlib.smoothShade(chn, 38)
-    O.place(chn, [fx, L.FD_Y[0] + 0.085, 1.585], [0, 1], [1, 0])
-    w.add(chn, M.brass)
+    for (const [ob, mm] of surfaceBolt(M.brass)) {
+      O.place(ob, [fx, ly + 0.085, 1.265], [0, 1], [1, 0])
+      w.add(ob, mm)
+    }
   }
 
   // ========================================================= KITCHEN WINDOW

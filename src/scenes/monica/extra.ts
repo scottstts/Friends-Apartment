@@ -298,7 +298,9 @@ function toaster(w: World, loc: Vec3, rotz = 0.0): void {
   }
 }
 
-/** Black wrought double hook on the wall beside the door. */
+/** Black wrought double hook on the wall beside the door: two scrolled arms,
+ * both reaching out and turning up - the lower one further out than the
+ * upper, so a coat on it hangs clear. */
 function coatHook(w: World, loc: Vec3): void {
   const parts: MeshData[] = []
   parts.push(
@@ -319,7 +321,7 @@ function coatHook(w: World, loc: Vec3): void {
   )
   const arms: [number, number, number][] = [
     [0.032, 0.068, 0.04],
-    [-0.028, 0.092, -0.046],
+    [-0.028, 0.092, 0.048],
   ]
   for (const [z0, reach, tip] of arms) {
     const pts: Vec3[] = []

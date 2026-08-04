@@ -1,6 +1,6 @@
 """Assemble every door and window into the shell."""
 import bpy, math
-from mathutils import Matrix
+from mathutils import Matrix, Vector
 import mlib, mats, L, s_openings as O
 
 
@@ -58,6 +58,397 @@ def mk_mats():
     return M
 
 
+def _sup_r(th, a, b, n):
+    """Radius of the superellipse |x/a|^n + |z/b|^n = 1 along a ray."""
+    c, s = math.cos(th), math.sin(th)
+    return (abs(c / a) ** n + abs(s / b) ** n) ** (-1.0 / n)
+
+
+# ---- the peephole surround, measured off ref_images/decoration.png ------
+# Everything here is in REFERENCE PIXELS of that image with the origin at the
+# centre of the opening, +X right, +Z up: outer 341 x 361, opening 188 x 223.
+_PF_AW, _PF_AH = 96.0, 114.0        # opening half-width / half-height
+_PF_APN = 7.0                       # opening is a superellipse: straight sides
+_PF_CMAX = 0.5 ** (1.0 / _PF_APN)   # ...so this is |x|/AW on its diagonal
+# How far the moulding stands out from the opening, round the loop: widest at
+# the middle of each side, cut back towards the diagonals where the curls take
+# the outline over.  Cutting on min(|x|/AW, |z|/AH) rather than on the polar
+# angle is what keeps the sides' bulge broad and flat the way the reference's
+# is - an angle-based taper starts eating into it far too early.  It also has
+# to bite hard enough that the rail's outer edge actually falls away towards a
+# corner: the opening's own radius grows by a third between the middle of a
+# side and the diagonal, so a gentler taper leaves the outline widening all
+# the way in, and with the curls sitting on the diagonals the whole thing
+# comes out a circle.  40 at 1.7 holds each side flat and then pinches, which
+# squares the outline off and opens the notch in front of each curl.
+_PF_BW_TB, _PF_BW_EX = 69.5, 4.5    # 69.5 top and bottom, 74 at the sides
+_PF_BW_CUT, _PF_BW_CP = 38.0, 1.7
+# min() of the two has a kink exactly on the diagonal, and since the whole
+# section is scaled by the rail's width that kink draws a dead-straight
+# crease diagonally across each corner.  Round the min off over this much.
+_PF_BW_SM = 0.30
+# The rail's section, in fractions of its width.  It is ONE solid band with a
+# flat top, a crown over each of its three lobes, and two narrow grooves cut
+# into it - not three rolls laid side by side.  Built up out of rolls instead,
+# the rail comes out as three thin separate arcs with bare bed showing between
+# them however the rolls are spaced: butt them together and the crease is a
+# wide shallow dish, leave a gap and the gap itself reads as a hole.  The
+# moulding on the reference is one mass and its ridges are cuts in it, so that
+# is how it is built here.  Three grooves, four lobes - the reference's
+# middle crease is the shallow one.  The crowns are deliberately slight next
+# to the grooves' depth: the rail has to read as a flat drapery creased by
+# fold lines, and crowning the lobes any harder turns it back into a row of
+# tubes with the silhouette rolling over far too softly.
+_PF_BAND_H, _PF_BAND_P = 14.5, 8.0  # height, and how flat the top is
+# The folds are not evenly spaced: they bunch towards the outer edge, so
+# the lobe against the opening is the broad one and they narrow outwards.
+# Spacing them evenly reads as knitting rather than gathered drapery.
+_PF_LOBES = ((0.150, 0.150, 2.0), (0.430, 0.130, 2.2),
+             (0.660, 0.100, 2.2), (0.885, 0.115, 2.0))
+_PF_GROOVES = ((0.30, 0.055, 7.0), (0.565, 0.050, 6.0), (0.76, 0.050, 6.5))
+_PF_GROOVE_P = 0.7                  # narrow and steep-sided, not a dish
+_PF_BLEND = 2.0                     # px the curls run into the rails over
+# Keep that small.  Widened, the rounding piles up where the rail and BOTH
+# curls of a corner are all in play at once and raises a flat wedge there.
+# The eight curls.  Every one is the same size, and the two on a corner are
+# each other reflected in that corner's axis, so a corner reads symmetrically
+# however the frame's own proportions fall.  The axis is a degree or two off
+# the true diagonal because the frame is taller than it is wide: that is what
+# lands the pair's reach on 0.945, the outer proportion the reference has.
+# They stand a little proud of the rails at both extremes, so each corner
+# reads as its own bump.  Same idea as the rail: a solid domed lobe with a
+# spiral groove cut across it, which leaves the rolled ribbon between the
+# wraps standing - a raised spiral instead just reads as wire on a blob.
+_PF_VOL_AXIS = 132.7                # deg, the top-left corner's axis
+_PF_VOL_MID = 186.0                 # the pair's centre, out along that axis
+_PF_VOL_SEP = 23.0                  # and half their step across it
+_PF_VOL_R = 32.0
+_PF_VOL_END = -10.0                 # where the rail runs into the curl
+#              turns  r0   rmax  gw   GD   CR    HB    re   Ae
+_PF_VOL_CUT = (1.25, 4.0, 26.0, 4.2, 8.0, 3.5, 16.0, 6.5, 4.5)
+
+
+def peephole_frame(name, w, h, cname, mat):
+    """The gold rococo surround round the peephole on Monica's door.
+
+    Built the way the prop is actually made - as ONE moulded piece.  It is
+    not an assembly of tubes: on the reference each side and the two curls
+    at its ends are a single continuous mass, and the ridges running along
+    it are creases in that mass, not gaps between separate rods.
+
+    So the shape is described as a relief - a height above the door face -
+    and then meshed in one go as a single quad ring:
+
+      * round the opening, a solid band with a flat top and a rolled edge at
+        either side, crowned over three lobes and cut with two grooves.  It
+        is widest at the middle of each side and pinched towards the corners,
+        which both bulges the outline between the corners and squares it off.
+      * at each corner a pair of volutes, one ending each rail: a domed lobe
+        with an Archimedean spiral groove cut across it and a boss in its
+        eye, so what stands proud is the rolled ribbon between the wraps.
+
+    The mass is the upper envelope of all of that, so nothing is a seam.
+    Built in XZ with +Y out of the door, matching what the caller's `place`
+    expects.  w x h is the outer size.
+    """
+    TAU = math.tau
+
+    def band_w(th):
+        r = _sup_r(th, _PF_AW, _PF_AH, _PF_APN)
+        u = abs(r * math.cos(th)) / _PF_AW
+        v = abs(r * math.sin(th)) / _PF_AH
+        e = max(0.0, 1.0 - abs(u - v) / _PF_BW_SM)
+        c = (min(u, v) - 0.25 * _PF_BW_SM * e * e) / _PF_CMAX
+        return (_PF_BW_TB + _PF_BW_EX * math.cos(th) ** 2
+                - _PF_BW_CUT * max(c, 0.0) ** _PF_BW_CP)
+
+    def rail_h(r, th):
+        """The moulding, measured out from the opening along the ray.  Radial
+        rather than normal to the opening: on a superellipse this near a
+        rectangle the two differ by under a degree, and doing it the other way
+        costs a search per sample."""
+        bw = band_w(th)
+        t = (r - _sup_r(th, _PF_AW, _PF_AH, _PF_APN)) / bw
+        if t <= 0.0 or t >= 1.0:
+            return 0.0
+        k = bw / 71.0                       # the section thins with the rail
+        y = _PF_BAND_H * math.sqrt(1.0 - (2.0 * t - 1.0) ** _PF_BAND_P)
+        for (c, hw, amp) in _PF_LOBES:
+            q = (t - c) / hw
+            if -1.0 < q < 1.0:
+                y += amp * math.sqrt(1.0 - q * q)
+        for (c, hw, d) in _PF_GROOVES:
+            q = (t - c) / hw
+            if -1.0 < q < 1.0:
+                y -= d * (1.0 - q * q) ** _PF_GROOVE_P
+        return max(y, 0.0) * k
+
+    # the curls: one pair built on the top-left corner's axis, then mirrored
+    # out to the other three.  Reflecting a spiral turns it over, so the
+    # handedness and the start angle travel with it - which is also how the
+    # second curl of each pair is made from the first.
+    ax = math.radians(_PF_VOL_AXIS)
+    ux, uz = math.cos(ax), math.sin(ax)
+    qx, qz = math.sin(ax), -math.cos(ax)
+    turns, r0, rmax, gw, GD, CR, HB, re, Ae = _PF_VOL_CUT
+    K, U, R = (rmax - r0) / turns, TAU * turns, _PF_VOL_R
+    vols = []
+    for sgn in (1.0, -1.0):
+        ex = _PF_VOL_MID * ux + sgn * _PF_VOL_SEP * qx
+        ez = _PF_VOL_MID * uz + sgn * _PF_VOL_SEP * qz
+        te, hand = math.radians(_PF_VOL_END), 1.0
+        if sgn < 0.0:                       # the side rail's curl, mirrored
+            te, hand = 2.0 * ax - te, -hand
+        for sx in (-1.0, 1.0):
+            for sz in (-1.0, 1.0):
+                t, hd = te, hand
+                if sx > 0.0:                # mirrored in X off the top-left
+                    t, hd = math.pi - t, -hd
+                if sz < 0.0:                # ...and in Z
+                    t, hd = -t, -hd
+                vols.append((sx * abs(ex), sz * abs(ez), t - hd * U, hd))
+
+    def vol_h(x, z, V):
+        ex, ez, th0, hd = V
+        dx, dz = x - ex, z - ez
+        d2 = dx * dx + dz * dz
+        if d2 >= R * R:
+            return 0.0
+        d = math.sqrt(d2)
+        y = HB * math.sqrt(1.0 - (d / R) ** 3)
+        # Where this point sits on the spiral: g counts wraps out from the
+        # eye, so it lands on a whole number exactly on a groove and halfway
+        # between two of them at the middle of a ribbon.  Working in that
+        # coordinate crowns the ribbon as well as cutting the groove, which
+        # is what makes a curl read as coiled rope instead of a flat disc
+        # with a scratch in it.  psi's wrap shifts g by exactly one turn, so
+        # its fraction - all the section depends on - runs on through.
+        psi = (hd * (math.atan2(dz, dx) - th0)) % TAU
+        g = (d - r0) / K - psi / TAU
+        f = min((g + 0.3) / 0.4, (turns + 0.3 - g) / 0.4)   # fade at the ends
+        if f > 0.0:
+            f = min(f, 1.0)
+            fr = g - math.floor(g)
+            y += f * CR * math.sin(math.pi * fr) ** 1.4
+            dd = min(fr, 1.0 - fr) * K
+            if dd < gw:
+                y -= f * GD * (1.0 - (dd / gw) ** 2) ** _PF_GROOVE_P
+        if d < re:                          # the boss in the eye
+            y += Ae * math.sqrt(1.0 - (d / re) ** 2)
+        return max(y, 0.0)
+
+    def field(x, z):
+        r = math.hypot(x, z)
+        y = rail_h(r, math.atan2(z, x)) if r > 1e-6 else 0.0
+        for V in vols:
+            v = vol_h(x, z, V)
+            # A rounded max, not a plain one: taken flat it leaves a hard
+            # crease everywhere a curl crosses its rail, and on the
+            # reference the two run into one another.  The grooves are cut
+            # by subtraction rather than by this, so rounding here softens
+            # the joins without touching them.
+            # The rounding width has to fall away with the smaller of the
+            # two, or it adds height out where BOTH are zero and the
+            # whole silhouette inflates into a disc.
+            k = min(_PF_BLEND, v, y)
+            d = k - abs(v - y) if k > 0.0 else 0.0
+            y = max(v, y) + (d * d / (4.0 * k) if d > 0.0 else 0.0)
+        return y
+
+    # ---- mesh it as one ring ------------------------------------------
+    # For each ray out of the centre, find where the mass ends, then lay a
+    # row of samples from the opening out to there.  The relief is zero at
+    # both, so the ring closes onto the door of its own accord.
+    NU, NV, EPS = 864, 48, 0.05
+    cols = []
+    for i in range(NU):
+        th = TAU * i / NU
+        ct, st = math.cos(th), math.sin(th)
+        r_in = _sup_r(th, _PF_AW, _PF_AH, _PF_APN)
+        lo, step, r = r_in, 2.0, r_in + 2.0
+        while r < 240.0:                    # last radius still carrying mass
+            if field(r * ct, r * st) > EPS:
+                lo = r
+            r += step
+        hi = lo + step
+        for _ in range(20):                 # then close on the edge
+            m = 0.5 * (lo + hi)
+            if field(m * ct, m * st) > EPS:
+                lo = m
+            else:
+                hi = m
+        cols.append((ct, st, r_in, lo))
+    # Smooth the outline before laying rows on it.  Every row runs radially
+    # from the opening out to this boundary, so wherever the boundary steps
+    # - and it steps by 40-odd px where a curl's arc gives way to the rail's
+    # edge - neighbouring rows are stretched by very different amounts and
+    # the shear between them shows as a straight crease running inwards.
+    # Spreading the step over a handful of columns takes that out; it costs
+    # a little of the notch in front of each curl, which is worth it.
+    outs = [c[3] for c in cols]
+    for _ in range(3):
+        outs = [0.0625 * outs[i - 2] + 0.25 * outs[i - 1] + 0.375 * outs[i]
+                + 0.25 * outs[(i + 1) % NU] + 0.0625 * outs[(i + 2) % NU]
+                for i in range(NU)]
+
+    grid = []
+    for (ct, st, r_in, _), r_out in zip(cols, outs):
+        col = []
+        for j in range(NV + 1):
+            r = r_in + (r_out - r_in) * j / NV
+            x, z = r * ct, r * st
+            col.append([x, z, field(x, z)])
+        col[0][2] = col[NV][2] = 0.0
+        grid.append(col)
+    # take the edge off - a straight envelope is a shade too crisp for
+    # something cast in a mould and then painted.
+    new = [[c[2] for c in col] for col in grid]
+    for i in range(NU):
+        a, b = grid[i - 1], grid[(i + 1) % NU]
+        for j in range(1, NV):
+            new[i][j] = (0.72 * grid[i][j][2]
+                         + 0.07 * (a[j][2] + b[j][2])
+                         + 0.07 * (grid[i][j - 1][2] + grid[i][j + 1][2]))
+    for i in range(NU):
+        for j in range(1, NV):
+            grid[i][j][2] = new[i][j]
+
+    # Scale off what actually got built rather than off a nominal outer size:
+    # the curls set the silhouette, and they move whenever their placement is
+    # touched.
+    ox = max(abs(c[0]) for col in grid for c in col)
+    oz = max(abs(c[1]) for col in grid for c in col)
+    SX, SZ = 0.5 * w / ox, 0.5 * h / oz
+    SY = 0.5 * (SX + SZ)
+    verts, faces = [], []
+    for col in grid:
+        for (x, z, y) in col:
+            verts.append((x * SX, y * SY, z * SZ))
+    W = NV + 1
+    for i in range(NU):
+        i2 = (i + 1) % NU
+        for j in range(NV):
+            faces.append((i * W + j, i2 * W + j, i2 * W + j + 1, i * W + j + 1))
+        # the back, flat on the door and never seen
+        faces.append((i2 * W, i * W, i * W + NV, i2 * W + NV))
+
+    ob = mlib.mesh_obj(name, verts, faces, cname)
+    mlib.recalc_normals(ob)
+    # 70, not the usual 32: the grooves' flanks are steeper than that and
+    # get marked sharp, which draws a hard line down the middle of every
+    # crease.  Only the silhouette, where the relief meets its own back at a
+    # right angle, should stay sharp.
+    mlib.smooth_shade(ob, 70)
+    mlib.set_mat(ob, mat)
+    return ob
+
+
+def _lock_plate(name, w, h, r, y0, y1, cname, seg=4):
+    """A back plate lying flat on a face: outline in (x, z), standing off in Y."""
+    return mlib.prism_xz(name, mlib.rounded_rect(w, h, r, seg), y0, y1, cname)
+
+
+def _lock_turn(name, prof, cname, at, seg=20):
+    """Anything turned - a knob, a collar, a screw head - with its axis out of
+    the face it is mounted on."""
+    ob = mlib.revolve(name, prof, seg, cname=cname)
+    mlib.rot_x(ob, -math.pi / 2)
+    mlib.translate(ob, at)
+    return ob
+
+
+def surface_bolt(name, cname, mat):
+    """A barrel bolt lying across the stile: back plate, two guide straps, the
+    bolt running through them towards the door edge, and a thumb tab on it.
+    The old one was a bare rounded slab with no bolt on it at all."""
+    P = [_lock_plate(name + "_pl", 0.100, 0.032, 0.007, 0.0, 0.005, cname)]
+    for k, gx in enumerate((-0.030, 0.024)):    # the two guide straps
+        g = _lock_plate(name + "_gd%d" % k, 0.013, 0.026, 0.004,
+                        0.005, 0.0165, cname, seg=2)
+        mlib.translate(g, (gx, 0.0, 0.0))
+        P.append(g)
+    # the bolt, shot to within a few mm of the leaf's edge
+    P.append(mlib.tube_along(name + "_bo",
+                             [(-0.064, 0.0107, 0.0), (0.036, 0.0107, 0.0)],
+                             mlib.circle(0.0055, 14), cname, up=(0, 0, 1)))
+    # a flat lug to throw it by - a turned knob here reads as a third lock
+    P.append(_lock_plate(name + "_tb", 0.011, 0.019, 0.005,
+                         0.0150, 0.0194, cname, seg=3))
+    screw = ((0.0, 0.0), (0.0030, 0.0), (0.0030, 0.0012),
+             (0.0017, 0.0021), (0.0, 0.0023))
+    for k, (sx, sz) in enumerate(((-0.043, 0.0), (0.043, 0.0))):
+        P.append(_lock_turn(name + "_sc%d" % k, screw, cname, (sx, 0.005, sz), 10))
+    ob = mlib.join(P, name, cname)
+    mlib.smooth_shade(ob, 34)
+    mlib.set_mat(ob, mat)
+    return [ob]
+
+
+def chain_slide(name, cname, mat, dark):
+    """The door half of a security chain: the track its ball-end runs in, with
+    the round pocket at the open end that the ball drops into."""
+    P = [_lock_plate(name + "_pl", 0.086, 0.024, 0.011, 0.0, 0.0048, cname)]
+    screw = ((0.0, 0.0), (0.0028, 0.0), (0.0028, 0.0011),
+             (0.0016, 0.0020), (0.0, 0.0022))
+    for k, sx in enumerate((-0.036, 0.036)):
+        P.append(_lock_turn(name + "_sc%d" % k, screw, cname, (sx, 0.0048, 0.0), 10))
+    ob = mlib.join(P, name, cname)
+    mlib.smooth_shade(ob, 34)
+    mlib.set_mat(ob, mat)
+    # the slot, and the pocket at the door-edge end of it
+    sl = mlib.prism_xz(name + "_sl", mlib.rounded_rect(0.050, 0.008, 0.004, 3),
+                       0.0, 0.0052, cname)
+    mlib.translate(sl, (0.008, 0.0, 0.0))
+    pk = mlib.prism_xz(name + "_pk", mlib.circle(0.0072, 14), 0.0, 0.0052, cname)
+    mlib.translate(pk, (-0.020, 0.0, 0.0))
+    slot = mlib.join([sl, pk], name + "_slot", cname)
+    mlib.set_mat(slot, dark)
+    return [ob, slot]
+
+
+def _chain_link(name, c, R, r, across, cname):
+    """One link, lying in a plane that contains the vertical so it hangs, and
+    turned across its neighbours the way a chain actually runs."""
+    a = [math.tau * k / 12.0 for k in range(12)]
+    if across:
+        path = [(c[0], c[1] + R * math.cos(t), c[2] + R * math.sin(t)) for t in a]
+        up = (1.0, 0.0, 0.0)
+    else:
+        path = [(c[0] + R * math.cos(t), c[1], c[2] + R * math.sin(t)) for t in a]
+        up = (0.0, 1.0, 0.0)
+    return mlib.tube_along(name, path, mlib.circle(r, 6), cname,
+                           close_path=True, up=up)
+
+
+def chain_anchor(name, cname, mat, links=12):
+    """The jamb half: the anchor plate, and the chain hanging slack off it with
+    its ball-end swinging free - the door is shut but not chained, which is how
+    the set photo has it.  The old chain was one smooth bent tube."""
+    P = [_lock_plate(name + "_pl", 0.026, 0.052, 0.007, 0.0, 0.005, cname, seg=3)]
+    screw = ((0.0, 0.0), (0.0028, 0.0), (0.0028, 0.0011),
+             (0.0016, 0.0020), (0.0, 0.0022))
+    for k, sz in enumerate((-0.018, 0.018)):
+        P.append(_lock_turn(name + "_sc%d" % k, screw, cname, (0.0, 0.005, sz), 10))
+    R, r, pitch = 0.0062, 0.0017, 0.0088
+    x0, y0, z0 = 0.0, 0.0088, -0.022
+    for k in range(links):
+        t = k / float(links - 1)
+        c = (x0, y0 + 0.006 * t, z0 - pitch * k)
+        P.append(_chain_link(name + "_lk%d" % k, c, R, r, k % 2 == 1, cname))
+    # the ball on the free end that runs in the track
+    end = (x0, y0 + 0.006, z0 - pitch * (links - 0.6))
+    bl = mlib.revolve(name + "_bl",
+                      [(0.0, -0.0072), (0.0042, -0.0060), (0.0058, -0.0022),
+                       (0.0058, 0.0022), (0.0042, 0.0060), (0.0, 0.0072)],
+                      12, cname=cname)
+    mlib.translate(bl, end)
+    P.append(bl)
+    ob = mlib.join(P, name, cname)
+    mlib.smooth_shade(ob, 40)
+    mlib.set_mat(ob, mat)
+    return [ob]
+
+
 def build(M=None):
     M = M or mk_mats()
     C = "Openings"
@@ -65,7 +456,8 @@ def build(M=None):
     # ============================================================ FRONT DOOR
     w, top = L.FD_Y[1] - L.FD_Y[0], L.FD_TOP
     cy = (L.FD_Y[0] + L.FD_Y[1]) * 0.5
-    ln = O.lining("FD_lining", w, top, L.TW, 0.024, C, M['trim'])
+    jamb_t = 0.024
+    ln = O.lining("FD_lining", w, top, L.TW, jamb_t, C, M['trim'])
     O.place(ln, (0.0, cy, 0.0), (0, 1), (-1, 0))
     cs = O.casing("FD_casing", w, top, 0.100, 0.026, C, M['trim'])
     O.place(cs, (0.0, cy, 0.0), (0, 1), (1, 0))
@@ -73,10 +465,18 @@ def build(M=None):
     cs2 = O.casing("FD_casing_out", w, top, 0.070, 0.016, C, M['trim'])
     O.place(cs2, (-L.TW, cy, 0.0), (0, 1), (-1, 0))
     # transom: head rail + sash
-    hr = mlib.box("FD_headrail", -w / 2, 0.0, L.FD_H, w / 2, L.TW, L.FD_H + 0.075, C)
+    # ...between the linings, not across the whole rough opening: full width
+    # it sits inside both jambs and the shared faces flicker at the two top
+    # corners.  The transom above already sizes itself this way.
+    hw = w / 2 - jamb_t
+    hr = mlib.box("FD_headrail", -hw, 0.0, L.FD_H, hw, L.TW, L.FD_H + 0.075, C)
     O.place(hr, (0.0, cy, 0.0), (0, 1), (-1, 0))
     mlib.set_mat(hr, M['trim'])
-    tf, tg = O.steel_window("FD_transom", w - 0.048, top - L.FD_H - 0.085, [1], 1,
+    # ...and clear of the head lining as well as the jambs.  Run to the full
+    # height of the rough opening its top rail sits inside the lining's head,
+    # and the shared faces flicker in a stripe right across the transom.
+    tf, tg = O.steel_window("FD_transom", w - 2 * jamb_t,
+                            top - jamb_t - L.FD_H - 0.085, [1], 1,
                             frame_w=0.048, frame_d=0.055, cname=C,
                             mat=M['trim'], glass=M['glass_dark'], cols_per_bay=1,
                             glass_back=0.008)
@@ -90,23 +490,19 @@ def build(M=None):
     O.place(leaf, (0.0, cy, 0.0), (0, 1), (-1, 0))
     # the yellow frame + peephole boss + hardware (all on the leaf face)
     fx = -0.075
-    # The gold frame is the one thing everyone knows about this door.  It was a
-    # 185 x 205 swept loop, which reads as a fat rounded outline with no
-    # moulding at all; on the set it is a proper mitred picture frame roughly
-    # 300 x 340 with a stepped gilt section and crisp corners.
-    FW, FH = 0.300, 0.340
-    prof = [(0.0, 0.0015), (0.0, 0.0170), (0.0060, 0.0225), (0.0155, 0.0250),
-            (0.0245, 0.0215), (0.0300, 0.0130), (0.0325, 0.0060),
-            (0.0340, 0.0025), (0.0340, 0.0015)]
-    fr = mlib.sweep_rect_frame("FD_yellowframe", FW, FH, prof, C)
-    mlib.smooth_shade(fr, 34)
-    mlib.set_mat(fr, M['gold'])
+    # The gold frame is the one thing everyone knows about this door, and a
+    # mitred rectangle is not it.  The prop is a moulded rococo surround with
+    # a pair of volutes on every corner and a reeded rail between them; see
+    # peephole_frame.  300 x 318 is the reference's own outer proportion.
+    fr = peephole_frame("FD_yellowframe", 0.300, 0.3178, C, M['gold'])
     O.place(fr, (fx, cy, 1.545), (0, 1), (1, 0))
-    # spyhole above the frame, not floating in the middle of it
+    # ...and the spyhole belongs in the middle of it.  It was moved out above
+    # the frame back when the frame was a plain rectangle with nothing to say
+    # about where it sat; the frame is hung *around* the spyhole on the set.
     ph = mlib.revolve("FD_peep", [(0.0, 0.0), (0.009, 0.0), (0.009, 0.006),
                                   (0.005, 0.008), (0.0, 0.008)], 16, cname=C)
     mlib.rot_x(ph, -math.pi / 2)
-    O.place(ph, (fx, cy, 1.790), (0, 1), (1, 0))
+    O.place(ph, (fx, cy, 1.545), (0, 1), (1, 0))
     mlib.set_mat(ph, M['brass'])
     # knocker: back-plate and ring, well clear below the frame
     kp = mlib.revolve("FD_knock_plate", [(0.0, 0.0), (0.034, 0.0), (0.034, 0.007),
@@ -128,35 +524,22 @@ def build(M=None):
     mlib.set_mat(ring, M['brass'])
     kn = O.knob_set("FD_knob", C, M['brass'])
     O.place(kn, (fx, L.FD_Y[0] + 0.11, 1.000), (0, 1), (1, 0))
-    # the stack of locks up the latch stile: two deadbolts, a slide bolt, and a
-    # security chain with an actual chain on it
-    for k, (zz, rr2) in enumerate(((1.415, 0.026), (1.135, 0.022))):
-        db = mlib.revolve("FD_deadbolt%d" % k,
-                          [(0.0, 0.0), (rr2 * 1.35, 0.0), (rr2 * 1.35, 0.008),
-                           (rr2, 0.014), (rr2, 0.030), (rr2 * 0.45, 0.036),
-                           (0.0, 0.038)], 18, cname=C)
-        mlib.rot_x(db, -math.pi / 2)
-        mlib.smooth_shade(db, 40)
-        O.place(db, (fx, L.FD_Y[0] + 0.105, zz), (0, 1), (1, 0))
-        mlib.set_mat(db, M['brass'])
-    sb = mlib.prism("FD_bolt", mlib.rounded_rect(0.115, 0.048, 0.008, 3), 0.0, 0.009, C)
-    mlib.rot_x(sb, -math.pi / 2)
-    O.place(sb, (fx, L.FD_Y[0] + 0.095, 1.265), (0, 1), (1, 0))
-    mlib.set_mat(sb, M['brass'])
-    cp = mlib.prism("FD_chainplate", mlib.rounded_rect(0.030, 0.075, 0.008, 3),
-                    0.0, 0.007, C)
-    mlib.rot_x(cp, -math.pi / 2)
-    O.place(cp, (fx, L.FD_Y[0] + 0.085, 1.585), (0, 1), (1, 0))
-    mlib.set_mat(cp, M['brass'])
-    slack = [(0.0, 0.0, 0.0)]
-    for k in range(1, 9):
-        t = k / 8.0
-        slack.append((-0.012 - 0.010 * math.sin(t * math.pi), 0.105 * t,
-                      -0.055 * math.sin(t * math.pi) - 0.004 * t))
-    chn = mlib.tube_along("FD_chain", slack, mlib.circle(0.0035, 6), C)
-    mlib.smooth_shade(chn, 38)
-    O.place(chn, (fx, L.FD_Y[0] + 0.085, 1.585), (0, 1), (1, 0))
-    mlib.set_mat(chn, M['brass'])
+    # Three fittings up the latch stile and no more, top to bottom: the
+    # security chain, the bolt, and the knob - which is exactly what the set
+    # photo has.  Only ONE of them is a knob you turn; every escutcheon added
+    # beyond these just puts another brass disc on the stile.
+    ly = L.FD_Y[0]
+    for ob in chain_slide("FD_chain_slide", C, M['chrome'], M['steel_dk']):
+        O.place(ob, (fx, ly + 0.080, 1.585), (0, 1), (1, 0))
+    # ...the chain itself hangs off the reveal, not off the leaf: a chain with
+    # both ends on the door is the thing that made this stack read as nonsense.
+    for ob in chain_anchor("FD_chain", C, M['chrome']):
+        # ...on the lining's face, not on the rough opening - the reveal is
+        # lined, so the jamb you can actually screw into is a jamb_t in.
+        # Hung off ly it ends up buried inside the lining and invisible.
+        O.place(ob, (-0.045, ly + jamb_t, 1.585), (1, 0), (0, 1))
+    for ob in surface_bolt("FD_bolt", C, M['brass']):
+        O.place(ob, (fx, ly + 0.085, 1.265), (0, 1), (1, 0))
 
     # ========================================================= KITCHEN WINDOW
     (dxc, dyc), cl = L.chamfer_dir()

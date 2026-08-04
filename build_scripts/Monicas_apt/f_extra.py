@@ -235,7 +235,8 @@ def toaster(name, loc, rotz=0.0, cname=C):
 
 def coat_hook(name, loc, cname=C):
     """Black wrought double hook on the wall beside the door: a back plate and
-    two scrolled arms, the upper one turning up, the lower one out and down."""
+    two scrolled arms, both reaching out and turning up - the lower one
+    further out than the upper, so a coat on it hangs clear."""
     parts = []
     pl = mlib.prism_yz(name + "_pl", [(-0.016, -0.052), (0.016, -0.052),
                                       (0.021, -0.030), (0.021, 0.030),
@@ -243,7 +244,7 @@ def coat_hook(name, loc, cname=C):
                                       (-0.021, 0.030), (-0.021, -0.030)],
                        0.0, 0.010, cname)
     parts.append(pl)
-    for (z0, reach, tip) in ((0.032, 0.068, 0.040), (-0.028, 0.092, -0.046)):
+    for (z0, reach, tip) in ((0.032, 0.068, 0.040), (-0.028, 0.092, 0.048)):
         pts = []
         for i in range(13):
             t = i / 12.0
