@@ -128,18 +128,29 @@ const PF_BAND_P = 8.0
 // lobe against the opening is the broad one and they narrow outwards.
 // Spacing them evenly reads as knitting rather than gathered drapery.
 const PF_LOBES: [number, number, number][] = [
-  [0.15, 0.15, 2.0],
-  [0.43, 0.13, 2.2],
-  [0.66, 0.1, 2.2],
-  [0.885, 0.115, 2.0],
+  [0.15, 0.15, 2.7],
+  [0.43, 0.13, 3.0],
+  [0.66, 0.1, 3.0],
+  [0.885, 0.115, 2.7],
 ]
 const PF_GROOVES: [number, number, number][] = [
-  [0.3, 0.055, 7.0],
-  [0.565, 0.05, 6.0],
-  [0.76, 0.05, 6.5],
+  [0.3, 0.065, 8.0],
+  [0.565, 0.058, 6.9],
+  [0.76, 0.058, 7.4],
 ]
-const PF_GROOVE_P = 0.7 // narrow and steep-sided, not a dish
+// Powers ABOVE one on purpose.  A groove or a crown that reaches zero as a
+// square root does it with a vertical tangent, so its rim is a crease of
+// infinite slope sitting in the middle of an otherwise smooth surface - no
+// mesh can carry that, and it comes out as the fine herringbone that used to
+// run along every groove edge round the curls.  Above one the feature dies
+// away tangentially and simply blends in.  Depths and widths are up a little
+// to keep the same read, since these profiles are narrower at half depth.
+const PF_GROOVE_P = 1.5 // narrow and steep-sided, not a dish
+const PF_LOBE_P = 1.25
+const PF_FOLD_OFF = 28.0 // rail width the folds fade over
+const PF_FOLD_ON = 16.0
 const PF_BLEND = 2.0 // px the curls run into the rails over
+const PF_SOFT = 0.9 // px the whole mass is softened by
 // Keep that small.  Widened, the rounding piles up where the rail and BOTH
 // curls of a corner are all in play at once and raises a flat wedge there.
 // The eight curls.  Every one is the same size, and the two on a corner are
@@ -155,9 +166,22 @@ const PF_VOL_AXIS = 132.7 // deg, the top-left corner's axis
 const PF_VOL_MID = 186.0 // the pair's centre, out along that axis
 const PF_VOL_SEP = 23.0 // and half their step across it
 const PF_VOL_R = 32.0
+// A low root under each curl, tying it back into its rail: centre at this
+// fraction of the eye's radius, then radius and height.  Without it the two
+// masses simply do not meet at the notch - the relief drops to nothing
+// between them, so the frame stops being star-shaped about its own centre,
+// and a ring that lays one row per ray has no choice but to span the void.
+// That is what sawed all four corners up.  It sits below both crests and
+// well inside the curl's own outline, so nothing you can see moves.
+const PF_ROOT_AT = 0.8
+const PF_ROOT_R = 40.0
+const PF_ROOT_H = 7.2
 const PF_VOL_END = -10.0 // where the rail runs into the curl
+// The spiral must not start too near its own eye: at r0 = 4 the innermost
+// wrap sat at a radius smaller than the groove cutting it, so the groove ate
+// its own centre and the eye came out as a patch of noise.
 //                        turns  r0   rmax  gw   GD   CR   HB    re   Ae
-const PF_VOL_CUT = [1.25, 4.0, 26.0, 4.2, 8.0, 3.5, 16.0, 6.5, 4.5] as const
+const PF_VOL_CUT = [1.15, 8.0, 26.0, 4.8, 9.2, 3.5, 16.0, 7.0, 5.6] as const
 
 /** The gold rococo surround round the peephole on Monica's door.
  *
@@ -203,13 +227,24 @@ function peepholeFrame(w: number, h: number): MeshData {
     if (t <= 0.0 || t >= 1.0) return 0.0
     const k = bw / 71.0 // the section thins with the rail
     let y = PF_BAND_H * Math.sqrt(1.0 - (2.0 * t - 1.0) ** PF_BAND_P)
-    for (const [c, hw, amp] of PF_LOBES) {
-      const q = (t - c) / hw
-      if (q > -1.0 && q < 1.0) y += amp * Math.sqrt(1.0 - q * q)
-    }
-    for (const [c, hw, d] of PF_GROOVES) {
-      const q = (t - c) / hw
-      if (q > -1.0 && q < 1.0) y -= d * (1.0 - q * q) ** PF_GROOVE_P
+    // The folds die out as the rail narrows into a corner, and they have to:
+    // their width is a FRACTION of the rail's, so by the diagonal they are a
+    // couple of tenths of a millimetre across - finer than the mesh can
+    // carry there, because that is also where the rows are longest.  Left
+    // in, they alias into the ragged steps that used to sit in all four
+    // corners.  On the reference they gather and vanish into the scrolls
+    // here in any case.
+    let f = Math.min(Math.max((bw - PF_FOLD_OFF) / PF_FOLD_ON, 0.0), 1.0)
+    f = f * f * (3.0 - 2.0 * f)
+    if (f > 0.0) {
+      for (const [c, hw, amp] of PF_LOBES) {
+        const q = (t - c) / hw
+        if (q > -1.0 && q < 1.0) y += f * amp * (1.0 - q * q) ** PF_LOBE_P
+      }
+      for (const [c, hw, d] of PF_GROOVES) {
+        const q = (t - c) / hw
+        if (q > -1.0 && q < 1.0) y -= f * d * (1.0 - q * q) ** PF_GROOVE_P
+      }
     }
     return Math.max(y, 0.0) * k
   }
@@ -227,7 +262,7 @@ function peepholeFrame(w: number, h: number): MeshData {
   const K = (rmax - r0) / turns
   const U = TAU * turns
   const R = PF_VOL_R
-  const vols: [number, number, number, number][] = []
+  const vols: [number, number, number, number, number, number][] = []
   for (const sgn of [1.0, -1.0]) {
     const ex = PF_VOL_MID * ux + sgn * PF_VOL_SEP * qx
     const ez = PF_VOL_MID * uz + sgn * PF_VOL_SEP * qz
@@ -252,17 +287,21 @@ function peepholeFrame(w: number, h: number): MeshData {
           t = -t
           hd = -hd
         }
-        vols.push([sx * Math.abs(ex), sz * Math.abs(ez), t - hd * U, hd])
+        vols.push([sx * Math.abs(ex), sz * Math.abs(ez), t - hd * U, hd, PF_ROOT_AT * sx * Math.abs(ex), PF_ROOT_AT * sz * Math.abs(ez)])
       }
     }
   }
 
-  const volH = (x: number, z: number, V: [number, number, number, number]): number => {
-    const [ex, ez, th0, hd] = V
+  const volH = (x: number, z: number, V: [number, number, number, number, number, number]): number => {
+    const [ex, ez, th0, hd, rx, rz] = V
+    const rdx = x - rx
+    const rdz = z - rz
+    const rd2 = (rdx * rdx + rdz * rdz) / (PF_ROOT_R * PF_ROOT_R)
+    const root = rd2 < 1.0 ? PF_ROOT_H * (1.0 - rd2 ** 1.6) ** 1.3 : 0.0
     const dx = x - ex
     const dz = z - ez
     const d2 = dx * dx + dz * dz
-    if (d2 >= R * R) return 0.0
+    if (d2 >= R * R) return root
     const d = Math.sqrt(d2)
     let y = HB * Math.sqrt(1.0 - (d / R) ** 3)
     // Where this point sits on the spiral: g counts wraps out from the eye,
@@ -274,16 +313,19 @@ function peepholeFrame(w: number, h: number): MeshData {
     // section depends on - runs on through.
     const psi = pmod(hd * (Math.atan2(dz, dx) - th0), TAU)
     const g = (d - r0) / K - psi / TAU
-    let f = Math.min((g + 0.3) / 0.4, (turns + 0.3 - g) / 0.4) // fade at the ends
+    // ...and it fades in over most of a wrap as it winds down to the eye,
+    // rather than arriving at full depth.
+    let f = Math.min((g + 0.15) / 0.55, (turns + 0.3 - g) / 0.4)
     if (f > 0.0) {
       f = Math.min(f, 1.0)
+      f = f * f * (3.0 - 2.0 * f) // ...and ease it in and out
       const fr = g - Math.floor(g)
       y += f * CR * Math.sin(Math.PI * fr) ** 1.4
       const dd = Math.min(fr, 1.0 - fr) * K
       if (dd < gw) y -= f * GD * (1.0 - (dd / gw) ** 2) ** PF_GROOVE_P
     }
-    if (d < re) y += Ae * Math.sqrt(1.0 - (d / re) ** 2) // the boss in the eye
-    return Math.max(y, 0.0)
+    if (d < re) y += Ae * (1.0 - (d / re) ** 2) ** PF_LOBE_P // the boss in the eye
+    return Math.max(y, root, 0.0)
   }
 
   const field = (x: number, z: number): number => {
@@ -305,14 +347,33 @@ function peepholeFrame(w: number, h: number): MeshData {
     return y
   }
 
+  /** The mass, softened.  Done in WORLD space on purpose: the rows below run
+   * radially between two boundaries that move at very different rates round
+   * a corner, so grid neighbours there sit at quite different places across
+   * the moulding.  Averaging those - the obvious way to soften a height grid
+   * - smears every groove by a different amount from one column to the next,
+   * and that is exactly what put ragged chevrons in all four corners.
+   * Sampling the field itself a fraction either side is the same softening
+   * and is blind to how the surface happens to be parametrised. */
+  const fieldS = (x: number, z: number): number =>
+    0.6 * field(x, z) +
+    0.1 * (field(x + PF_SOFT, z) + field(x - PF_SOFT, z) + field(x, z + PF_SOFT) + field(x, z - PF_SOFT))
+
   // ---- mesh it as one ring ------------------------------------------
   // For each ray out of the centre, find where the mass ends, then lay a row
   // of samples from the opening out to there.  The relief is zero at both,
   // so the ring closes onto the door of its own accord.
-  const NU = 864
-  const NV = 48
+  // Rows matter more than columns here.  Every groove - the rail's folds and
+  // the curls' spirals alike - is crossed by the rows and run along by the
+  // columns, so it is the row count that decides whether a groove comes out
+  // round or terraced.  The curls sit entirely in the outer stretch of each
+  // row, which is why that gets nearly half of them.
+  const NU = 720
+  const NV = 68
   const EPS = 0.05
-  const cols: [number, number, number, number][] = []
+  const BSPLIT = 0.52 // share of each row given to the rail,
+  const BFRAC = 0.88 // and how much of the rail it spans
+  const cols: [number, number, number, number, number][] = []
   for (let i = 0; i < NU; i++) {
     const th = (TAU * i) / NU
     const ct = Math.cos(th)
@@ -323,17 +384,17 @@ function peepholeFrame(w: number, h: number): MeshData {
     let r = rIn + 2.0
     while (r < 240.0) {
       // last radius still carrying mass
-      if (field(r * ct, r * st) > EPS) lo = r
+      if (fieldS(r * ct, r * st) > EPS) lo = r
       r += step
     }
     let hi = lo + step
     for (let b = 0; b < 20; b++) {
       // then close on the edge
       const m = 0.5 * (lo + hi)
-      if (field(m * ct, m * st) > EPS) lo = m
+      if (fieldS(m * ct, m * st) > EPS) lo = m
       else hi = m
     }
-    cols.push([ct, st, rIn, lo])
+    cols.push([ct, st, rIn, lo, bandW(th)])
   }
   // Smooth the outline before laying rows on it.  Every row runs radially
   // from the opening out to this boundary, so wherever the boundary steps -
@@ -357,31 +418,34 @@ function peepholeFrame(w: number, h: number): MeshData {
 
   const grid: [number, number, number][][] = []
   for (let i = 0; i < NU; i++) {
-    const [ct, st, rIn] = cols[i]
+    const [ct, st, rIn, , bw] = cols[i]
     const rOut = outs[i]
+    // Rows are NOT spread evenly from the opening out to the outline.
+    // Round a corner the outline runs on to a curl while the rail itself
+    // narrows, so an even spread leaves barely two samples across a groove
+    // AND slides them along it from one column to the next: the groove then
+    // beats against the grid and comes out as the fine comb that used to
+    // sit in all four corners.  Giving the rail a fixed share of the rows
+    // pins every groove to the same row the whole way round.  The share has
+    // to be a CONSTANT to do that - deriving it from how much of the row
+    // the rail happens to occupy puts the drift straight back in wherever
+    // that ratio changes.  It stops short of the rail's outer edge so there
+    // is always some row left over for whatever lies beyond it, even
+    // mid-side where nothing does.
+    const span = rOut - rIn
+    const band = Math.min(BFRAC * bw, span * 0.95)
     const col: [number, number, number][] = []
     for (let j = 0; j <= NV; j++) {
-      const r = rIn + ((rOut - rIn) * j) / NV
+      const u = j / NV
+      const r = u <= BSPLIT ? rIn + (band * u) / BSPLIT : rIn + band + ((span - band) * (u - BSPLIT)) / (1.0 - BSPLIT)
       const x = r * ct
       const z = r * st
-      col.push([x, z, field(x, z)])
+      col.push([x, z, fieldS(x, z)])
     }
     col[0][2] = 0.0
     col[NV][2] = 0.0
     grid.push(col)
   }
-  // take the edge off - a straight envelope is a shade too crisp for
-  // something cast in a mould and then painted.
-  const relief = grid.map((col) => col.map((c) => c[2]))
-  for (let i = 0; i < NU; i++) {
-    const a = grid[(i - 1 + NU) % NU]
-    const b = grid[(i + 1) % NU]
-    for (let j = 1; j < NV; j++) {
-      relief[i][j] = 0.72 * grid[i][j][2] + 0.07 * (a[j][2] + b[j][2]) + 0.07 * (grid[i][j - 1][2] + grid[i][j + 1][2])
-    }
-  }
-  for (let i = 0; i < NU; i++) for (let j = 1; j < NV; j++) grid[i][j][2] = relief[i][j]
-
   // Scale off what actually got built rather than off a nominal outer size:
   // the curls set the silhouette, and they move whenever their placement is
   // touched.
@@ -400,19 +464,27 @@ function peepholeFrame(w: number, h: number): MeshData {
   const faces: number[][] = []
   for (const col of grid) for (const [x, z, y] of col) verts.push([x * SX, y * SY, z * SZ])
   const W = NV + 1
+  // Shade it all smooth and keep ONLY the two rims sharp - the edges where
+  // the relief turns over onto its own flat back.  An angle threshold cannot
+  // tell those from the steep wall of a groove: at anything low enough to
+  // catch the rim it also catches a couple of thousand scattered groove
+  // edges, and hard-shading those is what made the curls look patchy.
+  // Blender marks the rim edges sharp on the shared mesh; the same split in
+  // the smooth fans falls out here from giving the back band its own copies
+  // of the two rim rings, with the shading angle wide open.
+  const b0 = verts.length
+  for (let i = 0; i < NU; i++) verts.push([...verts[i * W]] as Vec3)
+  const bN = verts.length
+  for (let i = 0; i < NU; i++) verts.push([...verts[i * W + NV]] as Vec3)
   for (let i = 0; i < NU; i++) {
     const i2 = (i + 1) % NU
     for (let j = 0; j < NV; j++) faces.push([i * W + j, i2 * W + j, i2 * W + j + 1, i * W + j + 1])
     // the back, flat on the door and never seen
-    faces.push([i2 * W, i * W, i * W + NV, i2 * W + NV])
+    faces.push([b0 + i2, b0 + i, bN + i, bN + i2])
   }
   const ob = MeshData.from(verts, faces)
   mlib.recalcNormals(ob)
-  // 70, not the usual 32: the grooves' flanks are steeper than that and get
-  // marked sharp, which draws a hard line down the middle of every crease.
-  // Only the silhouette, where the relief meets its own back at a right
-  // angle, should stay sharp.
-  mlib.smoothShade(ob, 70)
+  mlib.smoothShade(ob, 180)
   return ob
 }
 
