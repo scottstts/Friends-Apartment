@@ -12,6 +12,7 @@ import { World } from './core/world'
 import { PlayerControls } from './player/controls'
 import type { SeatingSystem } from './player/seats'
 import { Ui } from './ui/ui'
+import { Music } from './audio/music'
 import { blenderFilmicVeryHighContrast } from './core/filmic'
 import { isDesktopChromium } from './core/platform'
 
@@ -32,9 +33,13 @@ async function boot():Promise<void> {
   if(!('gpu' in navigator)){Ui.fatal('WebGPU required');return}
   let requestEntry:(id:ApartmentId)=>void=()=>undefined
   let requestResume:()=>void=()=>undefined
+  // Scene-scoped: silent on the landing, begins from the top on scene entry,
+  // pauses with Esc, resets when the player walks back out to the hallway.
+  const music=new Music()
   const ui=new Ui({
     onEnter:(id)=>requestEntry(id),
     onResume:()=>requestResume(),
+    music,
   })
 
   let requiredLimits:Record<string,number>={}
@@ -241,6 +246,9 @@ async function boot():Promise<void> {
     started=true
     ui.enterGame()
     startRendering()
+    // Every scene entry - first visit or back through the hallway - starts
+    // the loop from the top, downstream of the door click's activation.
+    music.begin()
   }
 
   requestEntry=(id)=>{
@@ -283,13 +291,16 @@ async function boot():Promise<void> {
     if(controls)controls.enabled=locked&&!!active
     if(locked){
       if(entryTarget)tryEnter()
-      else if(started&&active){ui.enterGame();startRendering()}
+      else if(started&&active){ui.enterGame();startRendering();music.resume()}
       return
     }
     if(entryTarget)return
     if(started){
       stopRendering()
-      if(toHallway){toHallway=false;ui.showHallway()}else ui.showPause()
+      // Esc holds the loop where it stands; walking out resets it, so the
+      // next scene starts the music over.
+      if(toHallway){toHallway=false;ui.showHallway();music.reset()}
+      else{ui.showPause();music.pause()}
     }
   })
 

@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "typecheck": "tsc -b",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "score": "node tools/midi-to-score.mjs",
+    "verify:score": "node tools/verify-parity.mjs"
   },
   "dependencies": {
     "three": "^0.182.0"

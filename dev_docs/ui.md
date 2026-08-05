@@ -1,8 +1,11 @@
 # UI
 
-One module (`src/ui/ui.ts`), four veils: intro landing, pause, loading and the
-unsupported-browser/fatal page. Design rules are strict: **no explanation or
-description text, no in-game UI** — the whole window is the scene.
+Two modules — `src/ui/ui.ts` holds the four veils (intro landing, pause,
+loading, unsupported-browser/fatal) and `src/ui/sound.ts` the pause veil's
+sound row. Design rules are strict: **no explanation or description text, no
+in-game UI** — the whole window is the scene. The theme music (audio.md) is
+scene-scoped and its transport is driven entirely by the pointer-lock
+lifecycle in `main.ts`; the veils only host the sound row.
 
 ## The landing
 
@@ -37,7 +40,7 @@ multiplied over the render — no photo assets.
 
 ## Flow hooks
 
-`new Ui({ onEnter, onResume })`:
+`new Ui({ onEnter, onResume, music })`:
 
 | Method | Called by | Effect |
 | --- | --- | --- |
@@ -55,11 +58,21 @@ synchronously request pointer lock (transient user activation), so the UI
 calls straight into it. `onResume` re-requests pointer lock from the pause
 veil.
 
+The veils carry no transport state. `main.ts` pairs the music with the same
+pointer-lock transitions that drive them: scene entry `begin()`s the loop,
+the Esc that shows the pause veil `pause()`s it, the re-lock that hides the
+veil `resume()`s it, and the hallway exit that shows the landing `reset()`s
+it. `music` is the narrow `MusicUi` surface the pause veil's sound row
+mirrors - mute and master volume only (audio.md).
+
 ## Pause & fatal
 
 - **Pause** — the ornate doorbell rendered over the frozen frame (the render
-  loop stops while unlocked). No text beyond what the landing already
-  established.
+  loop stops while unlocked, and so does the music). No text beyond what the
+  landing already established. The whole veil is one Resume button, with one
+  exception: the sound row under Resume — a horizontal master-volume slider
+  and the brass mute speaker on one line — which stops its own pointer and
+  key events so interacting with it never resumes the scene.
 - **Fatal** (`Ui.fatal`) — the peephole-frame art (`decoration.png`) hung
   over a green door, with the single short message passed in ("Desktop
   Chromium required", "WebGPU required", "Scene unavailable"). Terminal:

@@ -25,10 +25,15 @@
  * hangs the peephole-frame art over a green door. */
 
 import type { ApartmentId } from '../scenes/types'
+import type { MusicUi } from '../audio/music'
+import { SoundControls } from './sound'
 
 export interface UiHooks {
   onEnter: (apartment: ApartmentId) => void
   onResume: () => void
+  /** Backs the pause veil's mute-and-volume row; the transport itself is
+   * driven by the pointer-lock lifecycle in main.ts, not by the veils. */
+  music: MusicUi
 }
 
 /* Fade-to-black-then-scene duration; the CSS transitions below sum to it. */
@@ -696,6 +701,11 @@ export class Ui {
     activate(this.pause, () => {
       if (!this.pause.classList.contains('hidden')) this.hooks.onResume()
     })
+    // Mute and volume, one line under Resume; the row contains its own
+    // events so the veil's whole-surface Resume never fires from it.
+    ;(this.pause.querySelector('.stack') as HTMLElement).appendChild(
+      new SoundControls(hooks.music).el,
+    )
     document.body.appendChild(this.pause)
   }
 
