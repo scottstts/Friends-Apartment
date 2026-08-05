@@ -1360,8 +1360,7 @@ function ceilingLight(w: World, cx: number, cy: number, M: MatSet, energy = 350.
   // from shadow depth, preventing both wall and ceiling self-silhouettes.
   w.pointLight([cx, cy, rimZ - 0.18], visualEnergy, P.blackbody(visualKelvin), 0.16, {
     shadowIntensity: 0.9,
-    shadowMapSize: 1024,
-    shadowRadius: 1,
+    shadowMapSize: 512,
   })
 }
 

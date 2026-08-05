@@ -1056,8 +1056,7 @@ function ceilingDome(w: World, loc: Vec3, M: MatSet, r = 0.165, energy = 300.0, 
   const visualKelvin = Math.min(kelvin, 4200)
   w.pointLight([loc[0], loc[1], loc[2] - 0.35], visualEnergy, P.blackbody(visualKelvin), 0.1, {
     shadowIntensity: 0.6,
-    shadowMapSize: 1024,
-    shadowRadius: 1,
+    shadowMapSize: 512,
   })
 }
 
@@ -1138,8 +1137,7 @@ function rattanPendant(w: World, loc: Vec3, r = 0.235, h = 0.225, drop = 1.05): 
   // wicker makes the nearby shade fill most of the point-light cube map and
   // projects a hugely magnified self-shadow onto the far living-room wall.
   w.pointLight([loc[0], loc[1], loc[2] - 0.04], 32.0, [1.0, 0.82, 0.62], 0.06, {
-    shadowMapSize: 1024,
-    shadowRadius: 1,
+    shadowMapSize: 512,
   })
 }
 
